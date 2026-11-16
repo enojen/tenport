@@ -51,6 +51,32 @@ commands.
 
 Init does not start a lane or a planner.
 
+### The steps of a task (proposed)
+
+The project gives the list of steps; the babysitter picks the steps of each task from it.
+
+1. `tenbox.yaml` lists the steps. Each step has a name and one sentence that says when it is
+   used. Some steps are required:
+
+   ```yaml
+   steps:
+     - { name: plan, required: true }
+     - { name: build, required: true }
+     - { name: debug, when: "a bug: show it with a repro first" }
+     - { name: eval, when: "the change touches an agent prompt or a skill" }
+     - { name: pr, required: true }
+     - { name: merge, required: true }
+   ```
+
+2. After the plan, the babysitter picks the steps the task needs, in order, for example
+   `plan, debug, build, pr, merge` for a bug. The pick is part of the plan.
+3. The user sees the steps when they approve the plan. There is no second approval.
+4. The panel shows the steps of the task, not every step of the project.
+5. Tenport refuses a pick that leaves out a required step or names a step that is not in the
+   list. The panel only shows what it gets.
+6. During the task, the babysitter can add a step, such as `debug` when a bug shows up in the
+   build. It sends an event with the reason, and the panel shows the change.
+
 ## 3. Claude subscriptions
 
 | Capability | Status |
