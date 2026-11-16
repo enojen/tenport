@@ -8,6 +8,9 @@ edition = "2024"
 publish = false
 license-file = "LICENSE"
 
+[workspace.dependencies]
+thiserror = "2.0.21"
+
 [profile.release]
 opt-level = 3
 lto = true

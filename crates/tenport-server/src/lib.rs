@@ -1,7 +1,7 @@
 mod accounts;
 mod agents;
 mod cluster;
-mod config;
+pub mod config;
 mod costs;
 mod db;
 mod events;
