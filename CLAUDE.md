@@ -19,10 +19,20 @@ what it must do.
 ## Code
 
 - An id is a newtype (`UserId(String)`), never a bare `String`. A state is an enum.
-- Each module has its own error type with `thiserror`. `anyhow` only in `main.rs`.
+- Each module has its own error type with `thiserror`, named `<Module>Error`: `ConfigError`,
+  `DbError`, `HttpError`. `anyhow` only in `main.rs`.
 - A trait only when it has two real implementations, such as a clock or the Kubernetes client
   for tests. Everything else is a concrete type.
 - No `unsafe` (the workspace forbids it).
+
+## Database
+
+- SQL is written by hand. A new migration:
+  `sqlx migrate add --source crates/tenport-server/migrations <name>`.
+- A migration that has run is never changed: sqlx keeps its checksum and the server will not
+  start. A fix is a new migration. No down migrations; the way back is the daily backup.
+- Queries use `sqlx::query!` and `query_as!`, checked against the schema at compile time.
+  After a query or a migration changes, `cargo sqlx prepare --workspace` and commit `.sqlx/`.
 
 ## Tests
 

@@ -1,11 +1,11 @@
 mod accounts;
 mod agents;
 mod cluster;
-mod config;
+pub mod config;
 mod costs;
-mod db;
+pub mod db;
 mod events;
-mod http;
+pub mod http;
 mod lanes;
 mod projects;
 mod runs;
