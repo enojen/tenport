@@ -3,7 +3,7 @@ use sqlx::SqliteConnection;
 use super::model::{TaskClosed, TaskStarted};
 use crate::events::Stamp;
 
-pub async fn insert_task(
+pub async fn open_task(
     conn: &mut SqliteConnection,
     started: &TaskStarted,
     stamp: &Stamp<'_>,
@@ -11,7 +11,8 @@ pub async fn insert_task(
     let done = sqlx::query!(
         "insert into tasks (project_id, id, title, url, created_at, created_by)
          values (?, ?, ?, ?, ?, ?)
-         on conflict (project_id, id) do nothing",
+         on conflict (project_id, id) do update set closed_at = null, closed_by = null
+         where tasks.closed_at is not null",
         started.project,
         started.task,
         started.title,
