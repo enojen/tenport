@@ -24,6 +24,15 @@ what it must do.
   for tests. Everything else is a concrete type.
 - No `unsafe` (the workspace forbids it).
 
+## Database
+
+- SQL is written by hand. A new migration:
+  `sqlx migrate add --source crates/tenport-server/migrations <name>`.
+- A migration that has run is never changed: sqlx keeps its checksum and the server will not
+  start. A fix is a new migration. No down migrations; the way back is the daily backup.
+- Queries use `sqlx::query!` and `query_as!`, checked against the schema at compile time.
+  After a query or a migration changes, `cargo sqlx prepare --workspace` and commit `.sqlx/`.
+
 ## Tests
 
 - Unit tests in `#[cfg(test)] mod tests;` with the body in `tests.rs` next to the module.
