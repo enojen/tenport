@@ -1,9 +1,9 @@
 name: server
 on:
   push:
-    paths: [crates/tenport-server/**, crates/tenport-run-credentials/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/server.yml]
+    paths: [crates/tenport-server/**, crates/tenport-run-credentials/**, .sqlx/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/server.yml]
   pull_request:
-    paths: [crates/tenport-server/**, crates/tenport-run-credentials/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/server.yml]
+    paths: [crates/tenport-server/**, crates/tenport-run-credentials/**, .sqlx/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/server.yml]
 concurrency:
   group: server-${{ github.ref }}
 jobs:
@@ -12,6 +12,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    env:
+      SQLX_OFFLINE: "true"
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain

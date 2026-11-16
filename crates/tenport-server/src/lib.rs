@@ -1,10 +1,10 @@
-mod accounts;
+pub mod accounts;
 mod agents;
 mod cluster;
 pub mod config;
 mod costs;
 pub mod db;
-mod events;
+pub mod events;
 pub mod http;
 mod lanes;
 pub mod logs;

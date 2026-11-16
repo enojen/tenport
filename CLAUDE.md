@@ -32,8 +32,14 @@ what it must do.
   `sqlx migrate add --source crates/tenport-server/migrations <name>`.
 - A migration that has run is never changed: sqlx keeps its checksum and the server will not
   start. A fix is a new migration. No down migrations; the way back is the daily backup.
-- Queries use `sqlx::query!` and `query_as!`, checked against the schema at compile time.
-  After a query or a migration changes, `cargo sqlx prepare --workspace` and commit `.sqlx/`.
+- Queries use `sqlx::query!` and `query_as!`, checked at compile time against the database in
+  `.env` (`target/sqlx.db`). Make it once, and again after each new migration:
+  `sqlx database create && sqlx migrate run --source crates/tenport-server/migrations`.
+- After a query or a migration changes, `cargo sqlx prepare --workspace -- --all-targets` and
+  commit `.sqlx/`. CI builds with `SQLX_OFFLINE=true` from it.
+- Every change is an event: `events::append` writes it to the log and updates the tables in one
+  transaction. Each topic has its own event enum (`AccountsEvent`) and its own `apply`; a table
+  is written only there.
 
 ## Tests
 
