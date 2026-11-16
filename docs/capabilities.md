@@ -94,6 +94,40 @@ What the Claude Code docs say (checked 2026-11-16):
 | The `agents` part of `tenbox.yaml` gives the model and the skills of the planner and the babysitter | Proposed |
 | "Start planner" and "Stop" buttons in the panel, or only in the CLI. In the panel, they would be the first exception to "the panel only shows" | Open |
 
+### Messages between agents (proposed)
+
+The planner and the babysitters talk through Tenport. There is no second service.
+
+1. An agent runs `tenbox message <to> "<text>"`. Tenport writes `message.sent` and opens an
+   unread row for the receiver, as it does for a question.
+2. The receiver reads with `tenbox inbox`, and the row closes.
+3. Every message goes through Tenport, so the panel and the audit log show it.
+4. An agent talks only to its own planner or to its own babysitters, so that two agents do not
+   answer each other without end.
+
+An agent that waits must wake up when a message comes. In Claude Code, `/loop` can run
+`tenbox inbox` again and again; `tenbox inbox --wait` works for any coding agent. Which one works
+best is tried when the agents are built.
+
+### A lane that runs on its own (proposed)
+
+The babysitter takes its lane's tasks to the end without the user, but never to `main`.
+
+1. Each lane has its own branch, made from `main`. Each task opens its PR into the lane branch.
+2. The babysitter merges a task's PR into the lane branch itself, only after the proof loop
+   passes.
+3. The user reads one PR, the lane branch into `main`, and merges it.
+
+The proof loop of each task, in this order:
+
+1. A real repro first: a failing test or a real run that shows the bug or the missing work.
+2. A test that is red before the change and green after it.
+3. The checks of the project pass.
+4. A real run of the change.
+5. An independent review, by an agent that did not write the code.
+
+When a step fails again and again, the babysitter stops and asks the user (`question.asked`).
+
 ## 5. Runs on the cluster
 
 | Capability | Status |
