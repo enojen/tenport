@@ -55,15 +55,15 @@ path, to try it on a computer next to other processes.
 ## Build and test
 
 ```sh
-docker build --target check -f crates/procs/Dockerfile .   # cargo fmt, clippy with -D warnings, the tests
-docker build -f crates/procs/Dockerfile . -t procs         # the image
+docker build --target check -f crates/tenport-procs/Dockerfile .   # cargo fmt, clippy with -D warnings, the tests
+docker build -f crates/tenport-procs/Dockerfile . -t procs         # the image
 ```
 
 The image builds with the `procs` profile of the workspace: the release profile with
 `panic = "abort"`, which a package cannot set alone. Alpine's Rust links musl statically, so the
 binary needs no libc in the `scratch` image.
 
-`.github/workflows/procs.yml` runs both on every change to `crates/procs/` and pushes the image
+`.github/workflows/procs.yml` runs both on every change to `crates/tenport-procs/` and pushes the image
 to `ghcr.io/enojen/tenport-procs` as `:<commit>`, on `main` also as `:latest`. `task/job.yaml` in the tenyard repository
 names one image by commit and digest; a new one reaches the boxes only when that line changes.
 

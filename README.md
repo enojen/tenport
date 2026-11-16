@@ -9,14 +9,16 @@ events and the costs. Everything else talks to it over HTTP.
 ## The crates
 
 The repository is a Cargo workspace: one `Cargo.toml` and one `Cargo.lock` at the root, and one
-crate for each program under `crates/`. Each program has its own image.
+crate for each program or shared library under `crates/`. Each program has its own image.
 
 | Crate | What it is | Image |
 |---|---|---|
-| `crates/injector` | The proxy that writes the real token into a box's request to GitHub or its tracker | `ghcr.io/enojen/tenport-injector` |
-| `crates/procs` | The sidecar of each box pod: the CPU and memory of each group of processes | `ghcr.io/enojen/tenport-procs` |
+| `crates/tenport-injector` | The proxy that writes the real token into a box's request to GitHub or its tracker | `ghcr.io/enojen/tenport-injector` |
+| `crates/tenport-procs` | The sidecar of each box pod: the CPU and memory of each group of processes | `ghcr.io/enojen/tenport-procs` |
+| `crates/tenport-server` | The backend; empty modules for now, filled one by one | not yet |
+| `crates/tenport-run-credentials` | The request and the answer between the server and the injector | a library |
 
-The server crate comes next. The injector and procs came from the tenyard repository, where
+The injector and procs came from the tenyard repository, where
 their earlier history stays.
 
 ## The four repositories
@@ -46,8 +48,8 @@ The commands you will use every day:
 | Command | What it does |
 |---|---|
 | `cargo build` | Compiles every crate |
-| `cargo build -p injector` | Compiles one crate |
-| `cargo run -p procs` | Compiles and starts one program |
+| `cargo build -p tenport-injector` | Compiles one crate |
+| `cargo run -p tenport-procs` | Compiles and starts one program |
 | `cargo test` | Runs the tests |
 | `cargo fmt` | Formats the code |
 | `cargo clippy` | Lints the code; treat each warning as an error |
@@ -61,7 +63,7 @@ Where to learn:
 - "The Rust Programming Language" (the book): https://doc.rust-lang.org/book/. Chapters 1 to 10
   are enough to start. Ownership (chapter 4) is the part that is new for a TypeScript developer.
 - "Rust by Example": https://doc.rust-lang.org/rust-by-example/, short examples for each topic.
-- `crates/injector` is a small Rust service that already runs on the cluster. It uses `tokio`
+- `crates/tenport-injector` is a small Rust service that already runs on the cluster. It uses `tokio`
   and `hyper`, the same base as the server will use.
 
 ## The stack (proposed, not decided)

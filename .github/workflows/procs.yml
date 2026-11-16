@@ -1,9 +1,9 @@
 name: procs
 on:
   push:
-    paths: [crates/procs/**, Cargo.toml, Cargo.lock, .github/workflows/procs.yml]
+    paths: [crates/tenport-procs/**, Cargo.toml, Cargo.lock, .github/workflows/procs.yml]
   pull_request:
-    paths: [crates/procs/**, Cargo.toml, Cargo.lock, .github/workflows/procs.yml]
+    paths: [crates/tenport-procs/**, Cargo.toml, Cargo.lock, .github/workflows/procs.yml]
 concurrency:
   group: procs-${{ github.ref }}
 jobs:
@@ -18,9 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check
-        run: docker build --target check -f crates/procs/Dockerfile .
+        run: docker build --target check -f crates/tenport-procs/Dockerfile .
       - name: Build
-        run: docker build -f crates/procs/Dockerfile . -t "$IMAGE:$GITHUB_SHA"
+        run: docker build -f crates/tenport-procs/Dockerfile . -t "$IMAGE:$GITHUB_SHA"
       - name: Log in to GHCR
         if: github.event_name == 'push'
         env:

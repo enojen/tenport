@@ -1,9 +1,9 @@
 name: injector
 on:
   push:
-    paths: [crates/injector/**, Cargo.toml, Cargo.lock, .github/workflows/injector.yml]
+    paths: [crates/tenport-injector/**, Cargo.toml, Cargo.lock, .github/workflows/injector.yml]
   pull_request:
-    paths: [crates/injector/**, Cargo.toml, Cargo.lock, .github/workflows/injector.yml]
+    paths: [crates/tenport-injector/**, Cargo.toml, Cargo.lock, .github/workflows/injector.yml]
 concurrency:
   group: injector-${{ github.ref }}
 jobs:
@@ -18,9 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check
-        run: docker build --target check -f crates/injector/Dockerfile .
+        run: docker build --target check -f crates/tenport-injector/Dockerfile .
       - name: Build
-        run: docker build -f crates/injector/Dockerfile . -t "$IMAGE:$GITHUB_SHA"
+        run: docker build -f crates/tenport-injector/Dockerfile . -t "$IMAGE:$GITHUB_SHA"
       - name: Log in to GHCR
         if: github.event_name == 'push'
         env:
