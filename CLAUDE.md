@@ -42,7 +42,8 @@ what it must do.
 ## Before a PR
 
 `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` and
-`cargo test --workspace`. CI runs the same in the Dockerfile's `check` stage.
+`cargo test --workspace`. CI runs the same: `server.yml` for the server, the Dockerfile's `check`
+stage for the injector and procs. `rust-toolchain.toml` pins Rust to the version of the images.
 
 ## Rules
 

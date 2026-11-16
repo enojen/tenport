@@ -40,8 +40,9 @@ file, so the three repositories cannot disagree about a field.
 
 ## First steps with Rust
 
-Rust is installed on this computer with `rustup` (rustc 1.100, edition 2024). The tools are in
-`~/.cargo/bin`.
+Rust is installed on this computer with `rustup`; the tools are in `~/.cargo/bin`.
+`rust-toolchain.toml` pins the version (1.99.1, edition 2024), the same as CI and the images;
+`rustup` installs it on the first `cargo` command in this repository.
 
 The commands you will use every day:
 

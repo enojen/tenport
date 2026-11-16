@@ -1,0 +1,24 @@
+name: server
+on:
+  push:
+    paths: [crates/tenport-server/**, crates/tenport-run-credentials/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/server.yml]
+  pull_request:
+    paths: [crates/tenport-server/**, crates/tenport-run-credentials/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/server.yml]
+concurrency:
+  group: server-${{ github.ref }}
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup toolchain install
+      - name: Format
+        run: cargo fmt --check -p tenport-server -p tenport-run-credentials
+      - name: Lint
+        run: cargo clippy --locked -p tenport-server -p tenport-run-credentials --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked -p tenport-server -p tenport-run-credentials
