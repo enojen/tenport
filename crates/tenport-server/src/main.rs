@@ -1,16 +1,22 @@
 use std::process::ExitCode;
 
 use tenport_server::config::Config;
+use tenport_server::db;
 
-fn main() -> ExitCode {
-    match Config::from_env() {
-        Ok(config) => {
-            println!("tenport: would listen on {}", config.listen);
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("tenport: {error}");
-            ExitCode::FAILURE
-        }
+#[tokio::main]
+async fn main() -> ExitCode {
+    let config = match Config::from_env() {
+        Ok(config) => config,
+        Err(error) => return fail(&error),
+    };
+    if let Err(error) = db::open(&config.database).await {
+        return fail(&error);
     }
+    println!("tenport: would listen on {}", config.listen);
+    ExitCode::SUCCESS
+}
+
+fn fail(error: &dyn std::error::Error) -> ExitCode {
+    eprintln!("tenport: {error}");
+    ExitCode::FAILURE
 }

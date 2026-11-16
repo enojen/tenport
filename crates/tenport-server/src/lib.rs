@@ -3,7 +3,7 @@ mod agents;
 mod cluster;
 pub mod config;
 mod costs;
-mod db;
+pub mod db;
 mod events;
 mod http;
 mod lanes;
