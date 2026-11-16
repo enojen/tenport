@@ -1,0 +1,195 @@
+use super::*;
+use crate::accounts::{self, GithubLogin, NewUser, Registered, Registration, Role};
+use crate::db;
+use crate::name::Name;
+use crate::projects::{NewProject, Repo};
+use crate::tracker::TrackerUrl;
+
+async fn register(db: &Db, org: &str, github: &str) -> Registered {
+    let registration = Registration {
+        org: Name::parse(org).unwrap(),
+        user: NewUser {
+            name: Name::parse(github).unwrap(),
+            email: None,
+            github: GithubLogin::parse(github).unwrap(),
+        },
+        role: Role::Admin,
+        token_name: Name::parse("laptop").unwrap(),
+    };
+    accounts::register(db, Actor::Server, registration)
+        .await
+        .unwrap()
+}
+
+async fn project_of(db: &Db, owner: &Registered) -> ProjectId {
+    let new = NewProject {
+        org: owner.org.clone(),
+        name: Name::parse("Tenport").unwrap(),
+        repo: Repo::parse("enojen/tenport").unwrap(),
+    };
+    projects::add(db, &owner.user, new).await.unwrap().id
+}
+
+fn started(project: &ProjectId, task: &str) -> Reported {
+    reported(TasksEvent::TaskStarted(TaskStarted {
+        project: project.clone(),
+        task: TaskId::parse(task).unwrap(),
+        title: Some(Name::parse("Add projects").unwrap()),
+        url: Some(TrackerUrl::parse("https://github.com/enojen/tenport/issues/7").unwrap()),
+    }))
+}
+
+fn closed(project: &ProjectId, task: &str) -> Reported {
+    reported(TasksEvent::TaskClosed(TaskClosed {
+        project: project.clone(),
+        task: TaskId::parse(task).unwrap(),
+    }))
+}
+
+fn reported(event: TasksEvent) -> Reported {
+    Reported {
+        id: EventId::now(),
+        at: OffsetDateTime::now_utc(),
+        event,
+    }
+}
+
+async fn open_tasks(db: &Db) -> i64 {
+    store::count_open_tasks(&mut db.acquire().await.unwrap())
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_started_task_is_open_until_it_is_closed() {
+    let (db, _dir) = db::temp().await;
+    let owner = register(&db, "Wegobi", "enojen").await;
+    let project = project_of(&db, &owner).await;
+    record_events(&db, &owner.user, vec![started(&project, "TEN-1")])
+        .await
+        .unwrap();
+    assert_eq!(open_tasks(&db).await, 1);
+    record_events(&db, &owner.user, vec![closed(&project, "TEN-1")])
+        .await
+        .unwrap();
+    assert_eq!(open_tasks(&db).await, 0);
+}
+
+#[tokio::test]
+async fn the_same_events_sent_again_are_skipped() {
+    let (db, _dir) = db::temp().await;
+    let owner = register(&db, "Wegobi", "enojen").await;
+    let project = project_of(&db, &owner).await;
+    let batch = vec![started(&project, "TEN-1"), closed(&project, "TEN-1")];
+    let first = record_events(&db, &owner.user, batch.clone())
+        .await
+        .unwrap();
+    let again = record_events(&db, &owner.user, batch).await.unwrap();
+    assert_eq!(
+        first,
+        Recorded {
+            stored: 2,
+            skipped: 0
+        }
+    );
+    assert_eq!(
+        again,
+        Recorded {
+            stored: 0,
+            skipped: 2
+        }
+    );
+}
+
+#[tokio::test]
+async fn closing_a_task_that_never_started_is_refused() {
+    let (db, _dir) = db::temp().await;
+    let owner = register(&db, "Wegobi", "enojen").await;
+    let project = project_of(&db, &owner).await;
+    let error = record_events(&db, &owner.user, vec![closed(&project, "TEN-1")])
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            TasksError::Events(EventsError::Refused {
+                reason: "the task is not open",
+                ..
+            })
+        ),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn a_task_is_started_once() {
+    let (db, _dir) = db::temp().await;
+    let owner = register(&db, "Wegobi", "enojen").await;
+    let project = project_of(&db, &owner).await;
+    record_events(&db, &owner.user, vec![started(&project, "TEN-1")])
+        .await
+        .unwrap();
+    let error = record_events(&db, &owner.user, vec![started(&project, "TEN-1")])
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            TasksError::Events(EventsError::Refused {
+                reason: "the task is started already",
+                ..
+            })
+        ),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn a_refused_event_leaves_the_whole_batch_out() {
+    let (db, _dir) = db::temp().await;
+    let owner = register(&db, "Wegobi", "enojen").await;
+    let project = project_of(&db, &owner).await;
+    let batch = vec![started(&project, "TEN-1"), closed(&project, "TEN-2")];
+    record_events(&db, &owner.user, batch).await.unwrap_err();
+    assert_eq!(open_tasks(&db).await, 0);
+}
+
+#[tokio::test]
+async fn only_a_member_of_the_organization_reports_its_tasks() {
+    let (db, _dir) = db::temp().await;
+    let owner = register(&db, "Wegobi", "enojen").await;
+    let stranger = register(&db, "Other", "ali").await;
+    let project = project_of(&db, &owner).await;
+    let error = record_events(&db, &stranger.user, vec![started(&project, "TEN-1")])
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&error, TasksError::NotMember { project: refused } if *refused == project),
+        "{error}"
+    );
+    assert_eq!(open_tasks(&db).await, 0);
+}
+
+#[test]
+fn a_task_id_follows_the_tenbox_rule() {
+    for good in ["TEN-301", "42", "a_b-c"] {
+        assert!(TaskId::parse(good).is_ok(), "{good:?}");
+    }
+    for bad in ["", "-a", "_a", "a b", "TEN/1", "#12"] {
+        assert_eq!(TaskId::parse(bad), Err(TaskIdError), "{bad:?}");
+    }
+}
+
+#[test]
+fn an_event_without_a_title_or_url_still_reads() {
+    let body = serde_json::json!({ "type": "task.started", "project": "k7f3qa", "task": "TEN-1" });
+    let event: TasksEvent = serde_json::from_value(body).unwrap();
+    assert!(matches!(
+        event,
+        TasksEvent::TaskStarted(TaskStarted {
+            title: None,
+            url: None,
+            ..
+        })
+    ));
+}

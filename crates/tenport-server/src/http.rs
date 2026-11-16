@@ -2,6 +2,7 @@ mod accounts;
 mod agents;
 mod auth;
 mod error;
+mod events;
 mod health;
 mod lanes;
 mod openapi;

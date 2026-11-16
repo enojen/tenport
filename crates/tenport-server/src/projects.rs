@@ -8,7 +8,7 @@ use sqlx::SqliteConnection;
 
 use crate::accounts::{self, AccountsError, OrgId, Role, UserId};
 use crate::db::Db;
-use crate::events::{self, Actor, Event, EventsError, Stamp};
+use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
 use crate::name::Name;
 
 pub use model::{Project, ProjectAdded, ProjectId, ProjectsEvent, Repo, RepoError};
@@ -54,10 +54,17 @@ pub(crate) async fn apply(
     conn: &mut SqliteConnection,
     event: &ProjectsEvent,
     stamp: &Stamp<'_>,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), ApplyError> {
     match event {
-        ProjectsEvent::ProjectAdded(added) => store::insert_project(conn, added, stamp).await,
+        ProjectsEvent::ProjectAdded(added) => store::insert_project(conn, added, stamp).await?,
     }
+    Ok(())
+}
+
+pub async fn is_member(db: &Db, user: &UserId, project: &ProjectId) -> Result<bool, ProjectsError> {
+    let mut conn = db.acquire().await?;
+    let found = store::find_project_of_member(&mut conn, project, user).await?;
+    Ok(found.is_some())
 }
 
 async fn require_admin(db: &Db, user: &UserId, org: &OrgId) -> Result<(), ProjectsError> {

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "update tasks set closed_at = ?, closed_by = ?\n         where project_id = ? and id = ? and closed_at is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "b74f511e093e192ba849a31577781e0964e09b3365cf28b310e6d43ae1fedca8"
+}

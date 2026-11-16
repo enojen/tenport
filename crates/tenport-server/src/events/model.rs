@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::accounts::{AccountsEvent, UserId};
 use crate::projects::ProjectsEvent;
+use crate::tasks::TasksEvent;
 
 const SERVER_ACTOR: &str = "server";
 
@@ -45,6 +46,7 @@ impl fmt::Display for Actor {
 pub enum Event {
     Accounts(AccountsEvent),
     Projects(ProjectsEvent),
+    Tasks(TasksEvent),
 }
 
 impl Event {
@@ -52,6 +54,7 @@ impl Event {
         match self {
             Self::Accounts(event) => event.kind(),
             Self::Projects(event) => event.kind(),
+            Self::Tasks(event) => event.kind(),
         }
     }
 
@@ -59,6 +62,7 @@ impl Event {
         match self {
             Self::Accounts(event) => event.subject(),
             Self::Projects(event) => event.subject(),
+            Self::Tasks(event) => event.subject(),
         }
     }
 }

@@ -7,7 +7,7 @@ mod tests;
 use sqlx::SqliteConnection;
 
 use crate::db::Db;
-use crate::events::{self, Actor, Event, EventsError, Stamp};
+use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
 use crate::name::Name;
 
 pub use model::{
@@ -91,15 +91,16 @@ pub(crate) async fn apply(
     conn: &mut SqliteConnection,
     event: &AccountsEvent,
     stamp: &Stamp<'_>,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), ApplyError> {
     match event {
         AccountsEvent::OrganizationAdded(added) => {
-            store::insert_organization(conn, added, stamp).await
+            store::insert_organization(conn, added, stamp).await?
         }
-        AccountsEvent::UserAdded(added) => store::insert_user(conn, added, stamp).await,
-        AccountsEvent::MemberAdded(added) => store::insert_membership(conn, added, stamp).await,
-        AccountsEvent::TokenAdded(added) => store::insert_token(conn, added, stamp).await,
+        AccountsEvent::UserAdded(added) => store::insert_user(conn, added, stamp).await?,
+        AccountsEvent::MemberAdded(added) => store::insert_membership(conn, added, stamp).await?,
+        AccountsEvent::TokenAdded(added) => store::insert_token(conn, added, stamp).await?,
     }
+    Ok(())
 }
 
 async fn find_or_new_organization(
