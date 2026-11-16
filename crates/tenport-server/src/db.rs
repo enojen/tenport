@@ -42,3 +42,10 @@ pub async fn open(path: &Path) -> Result<Db, DbError> {
 pub async fn ping(db: &Db) -> Result<(), sqlx::Error> {
     sqlx::query("select 1").execute(db).await.map(|_| ())
 }
+
+#[cfg(test)]
+pub async fn temp() -> (Db, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open(&dir.path().join("tenport.db")).await.unwrap();
+    (db, dir)
+}
