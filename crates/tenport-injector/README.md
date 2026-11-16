@@ -47,9 +47,9 @@ injector --ca-cert <pem> --ca-key <pem> --host <name> [--host <name>...]
 ## Build and test
 
 ```sh
-docker build --target check -f crates/injector/Dockerfile .   # cargo fmt, clippy with -D warnings, the tests
-docker build -f crates/injector/Dockerfile . -t injector      # the image
+docker build --target check -f crates/tenport-injector/Dockerfile .   # cargo fmt, clippy with -D warnings, the tests
+docker build -f crates/tenport-injector/Dockerfile . -t injector      # the image
 ```
 
-`.github/workflows/injector.yml` runs both on every change to `crates/injector/` and pushes the
+`.github/workflows/injector.yml` runs both on every change to `crates/tenport-injector/` and pushes the
 image to `ghcr.io/enojen/tenport-injector` as `:<commit>`, on `main` also as `:latest`.

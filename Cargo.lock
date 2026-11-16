@@ -239,24 +239,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "injector"
-version = "0.1.0"
-dependencies = [
- "base64",
- "bytes",
- "http-body-util",
- "hyper",
- "hyper-util",
- "rcgen",
- "rustls",
- "serde_json",
- "time",
- "tokio",
- "tokio-rustls",
- "webpki-roots",
-]
-
-[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -385,13 +367,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "procs"
-version = "0.1.0"
-dependencies = [
- "regex",
 ]
 
 [[package]]
@@ -606,6 +581,39 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
+
+[[package]]
+name = "tenport-injector"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "bytes",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "rcgen",
+ "rustls",
+ "serde_json",
+ "time",
+ "tokio",
+ "tokio-rustls",
+ "webpki-roots",
+]
+
+[[package]]
+name = "tenport-procs"
+version = "0.1.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
+name = "tenport-run-credentials"
+version = "0.1.0"
+
+[[package]]
+name = "tenport-server"
+version = "0.1.0"
 
 [[package]]
 name = "thiserror"
