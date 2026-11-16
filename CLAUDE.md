@@ -23,6 +23,7 @@ what it must do.
   `DbError`, `HttpError`. `anyhow` only in `main.rs`.
 - A trait only when it has two real implementations, such as a clock or the Kubernetes client
   for tests. Everything else is a concrete type.
+- Logs go through `tracing`, never `println!` or `eprintln!`. `RUST_LOG` sets the filter.
 - No `unsafe` (the workspace forbids it).
 
 ## Database

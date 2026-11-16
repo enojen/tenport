@@ -2,17 +2,18 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use tenport_server::config::Config;
-use tenport_server::db;
 use tenport_server::http::{self, AppState};
+use tenport_server::{db, logs};
 use tokio::net::TcpListener;
 use tokio::signal::unix::{Signal, SignalKind, signal};
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    logs::init();
     match run().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("tenport: {error:#}");
+            tracing::error!("{error:#}");
             ExitCode::FAILURE
         }
     }
@@ -25,11 +26,11 @@ async fn run() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("cannot listen on {}", config.listen))?;
     let terminate = signal(SignalKind::terminate()).context("cannot watch SIGTERM")?;
-    eprintln!("tenport: listening on {}", config.listen);
+    tracing::info!(address = %config.listen, "listening");
     axum::serve(listener, http::router(AppState { db }))
         .with_graceful_shutdown(stopped(terminate))
         .await?;
-    eprintln!("tenport: stopped");
+    tracing::info!("stopped");
     Ok(())
 }
 

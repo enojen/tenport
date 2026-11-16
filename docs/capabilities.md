@@ -116,6 +116,27 @@ What the Claude Code docs say (checked 2026-11-16):
 | A copy of the database to a file (`backup`), which goes to Object Storage each day | Today |
 | The API documents itself: `/openapi.json` and `/docs` | Today |
 
+### Every change is an event (decided, 2026-11-16)
+
+Every change reaches Tenport as an event: a task step, a question of an agent, an answer, a
+node that comes or goes. Tenport writes the event to a log that is never changed. In the same
+transaction it updates the tables that hold the state now, and the SSE stream tells the panel.
+
+- The log gives the history, the panel's timeline and the costs. The tables give fast reads.
+- A broken table can be built again from the log. Tenport does not replay the log on each
+  start: this is not full event sourcing.
+- Each event type is a Rust type, with one function that updates the tables.
+
+A question, for example (the details wait until the work reaches it):
+
+1. The babysitter asks with a CLI command, such as `tenbox message`. It sends `question.asked`.
+2. Tenport writes the event and adds an open row to the questions table. The panel shows it.
+3. The user answers on the panel. Tenport writes `question.answered` and closes the row.
+4. The babysitter gets the answer.
+
+The panel then writes an answer, so this is an exception to "the panel only shows" (see the open
+question on the panel's buttons).
+
 ## 7. The panel's API
 
 Rules from the panel's RAM measurements (2026-11-15). Low browser RAM is the user's first concern.
@@ -130,7 +151,7 @@ Rules from the panel's RAM measurements (2026-11-15). Low browser RAM is the use
 | `Cache-Control: no-cache`, and no buffering on any proxy in between | Decided |
 | Tenport refuses a move that puts a task under itself or under one of its children. The panel only shows what it gets | Decided |
 | One name for each task state. Today the state says `todo` and the screen says `waiting` | Open |
-| One source for "needs you". Today a task has the state `asking` and an agent has a list of questions, and they can disagree | Open |
+| One source for "needs you": the open rows of the questions table, which only events change | Decided |
 
 ## 8. What stays outside Tenport
 
@@ -147,4 +168,3 @@ Rules from the panel's RAM measurements (2026-11-15). Low browser RAM is the use
 4. Is login with GitHub only?
 5. Try Remote Control in a pod before the server work: does it start without a question?
 6. Which name does a task state use: `todo` or `waiting`?
-7. What is the one source for "needs you"?
