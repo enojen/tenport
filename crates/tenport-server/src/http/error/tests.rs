@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex};
 
@@ -52,4 +53,30 @@ fn a_client_error_logs_nothing() {
     let (response, logs) = answer_with_logs(HttpError::Unauthorized);
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(logs, "");
+}
+
+fn detail_of(body: &str) -> String {
+    let rejection = Json::<Vec<HashMap<String, u8>>>::from_bytes(body.as_bytes()).unwrap_err();
+    HttpError::from(rejection).to_string()
+}
+
+#[test]
+fn a_wrong_field_names_its_path_without_the_position() {
+    assert_eq!(
+        detail_of(r#"[{"count": 1}, {"count": "x"}]"#),
+        "[1].count: invalid type: string \"x\", expected u8"
+    );
+}
+
+#[test]
+fn a_wrong_top_level_value_has_no_path() {
+    assert_eq!(detail_of("{}"), "invalid type: map, expected a sequence");
+}
+
+#[test]
+fn broken_json_says_it_is_not_json() {
+    assert_eq!(
+        detail_of(r#"[{"count": "#),
+        "the body is not valid JSON: [0].count: EOF while parsing a value"
+    );
 }

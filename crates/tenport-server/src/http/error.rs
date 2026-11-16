@@ -1,3 +1,5 @@
+use std::error::Error as StdError;
+
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
 use axum::http::{Method, StatusCode, header};
@@ -61,7 +63,40 @@ impl HttpError {
 
 impl From<JsonRejection> for HttpError {
     fn from(rejection: JsonRejection) -> Self {
-        Self::BadRequest(rejection.body_text())
+        let detail = match (&rejection, serde_error(&rejection)) {
+            (JsonRejection::JsonSyntaxError(_), Some(error)) => {
+                format!("the body is not valid JSON: {}", describe(error))
+            }
+            (_, Some(error)) => describe(error),
+            (_, None) => rejection.body_text(),
+        };
+        Self::BadRequest(detail)
+    }
+}
+
+type SerdeError = serde_path_to_error::Error<serde_json::Error>;
+
+fn serde_error(rejection: &JsonRejection) -> Option<&SerdeError> {
+    let mut source = StdError::source(rejection);
+    while let Some(error) = source {
+        if let Some(found) = error.downcast_ref::<SerdeError>() {
+            return Some(found);
+        }
+        source = error.source();
+    }
+    None
+}
+
+fn describe(error: &SerdeError) -> String {
+    let inner = error.inner();
+    let text = inner.to_string();
+    let position = format!(" at line {} column {}", inner.line(), inner.column());
+    let message = text.strip_suffix(&position).unwrap_or(&text);
+    let path = error.path().to_string();
+    if path == "." {
+        message.to_owned()
+    } else {
+        format!("{path}: {message}")
     }
 }
 
