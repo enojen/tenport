@@ -1,6 +1,7 @@
 use axum::http::{Method, Uri};
 use axum::routing::get;
 use axum::{Json, Router};
+use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -17,6 +18,7 @@ pub fn router(state: AppState) -> Router {
     router
         .route("/openapi.json", get(move || async move { Json(api) }))
         .fallback(no_route)
+        .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
 
