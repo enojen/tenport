@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "insert into tasks (project_id, id, title, url, created_at, created_by)\n         values (?, ?, ?, ?, ?, ?)\n         on conflict (project_id, id) do update set closed_at = null, closed_by = null\n         where tasks.closed_at is not null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "e777d38394b9669bb397c7ed97803a7eac95702862e0ade7ebda44fe3b7bb99c"
+}

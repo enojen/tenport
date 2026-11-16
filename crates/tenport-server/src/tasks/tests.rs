@@ -122,7 +122,7 @@ async fn closing_a_task_that_never_started_is_refused() {
 }
 
 #[tokio::test]
-async fn a_task_is_started_once() {
+async fn an_open_task_is_not_started_again() {
     let (db, _dir) = db::temp().await;
     let owner = register(&db, "Wegobi", "enojen").await;
     let project = project_of(&db, &owner).await;
@@ -136,12 +136,29 @@ async fn a_task_is_started_once() {
         matches!(
             error,
             TasksError::Events(EventsError::Refused {
-                reason: "the task is started already",
+                reason: "the task is open already",
                 ..
             })
         ),
         "{error}"
     );
+}
+
+#[tokio::test]
+async fn a_closed_task_starts_again() {
+    let (db, _dir) = db::temp().await;
+    let owner = register(&db, "Wegobi", "enojen").await;
+    let project = project_of(&db, &owner).await;
+    let first_round = vec![started(&project, "TEN-1"), closed(&project, "TEN-1")];
+    record_events(&db, &owner.user, first_round).await.unwrap();
+    record_events(&db, &owner.user, vec![started(&project, "TEN-1")])
+        .await
+        .unwrap();
+    assert_eq!(open_tasks(&db).await, 1);
+    record_events(&db, &owner.user, vec![closed(&project, "TEN-1")])
+        .await
+        .unwrap();
+    assert_eq!(open_tasks(&db).await, 0);
 }
 
 #[tokio::test]
