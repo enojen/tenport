@@ -4,38 +4,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use utoipa::ToSchema;
 
+use crate::id::short_id;
 use crate::name::{Name, parsed_text};
 
-const ID_LENGTH: usize = 6;
-const ID_ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 const TOKEN_PREFIX: &str = "tbx_";
 const TOKEN_BYTES: usize = 32;
 const GITHUB_LOGIN_MAX: usize = 39;
-
-macro_rules! short_id {
-    ($name:ident, $prefix:literal) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
-        #[serde(transparent)]
-        #[sqlx(transparent)]
-        pub struct $name(String);
-
-        impl $name {
-            pub fn random() -> Self {
-                Self(format!("{}{}", $prefix, random_chars()))
-            }
-
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(&self.0)
-            }
-        }
-    };
-}
 
 short_id!(OrgId, "o-");
 short_id!(UserId, "u-");
@@ -246,10 +220,4 @@ pub struct TokenAdded {
     pub user: UserId,
     pub name: Name,
     pub hash: TokenHash,
-}
-
-fn random_chars() -> String {
-    (0..ID_LENGTH)
-        .map(|_| char::from(ID_ALPHABET[rand::random_range(0..ID_ALPHABET.len())]))
-        .collect()
 }

@@ -1,4 +1,5 @@
 use axum::Json;
+use axum::extract::rejection::JsonRejection;
 use axum::http::{Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
@@ -16,8 +17,12 @@ pub enum HttpError {
     NoRoute { method: Method, path: String },
     #[error("the database does not answer")]
     DatabaseDown(#[source] sqlx::Error),
+    #[error("{0}")]
+    BadRequest(String),
     #[error("a valid bearer token is needed")]
     Unauthorized,
+    #[error("{0}")]
+    Forbidden(String),
     #[error("the server failed; see its log")]
     Internal(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
@@ -31,7 +36,9 @@ impl HttpError {
         match self {
             Self::NoRoute { .. } => StatusCode::NOT_FOUND,
             Self::DatabaseDown(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -40,9 +47,17 @@ impl HttpError {
         match self {
             Self::NoRoute { .. } => "not-found",
             Self::DatabaseDown(_) => "database-down",
+            Self::BadRequest(_) => "bad-request",
             Self::Unauthorized => "unauthorized",
+            Self::Forbidden(_) => "forbidden",
             Self::Internal(_) => "internal",
         }
+    }
+}
+
+impl From<JsonRejection> for HttpError {
+    fn from(rejection: JsonRejection) -> Self {
+        Self::BadRequest(rejection.body_text())
     }
 }
 
