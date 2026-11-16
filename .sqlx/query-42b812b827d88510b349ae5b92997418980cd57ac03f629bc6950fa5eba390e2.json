@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "select id, name, created_by from organizations where name = ?",
+  "query": "select organizations.id as \"org: _\", organizations.name as \"org_name: _\", memberships.role as \"role: _\"\n           from memberships join organizations on organizations.id = memberships.org_id\n           where memberships.user_id = ?\n           order by organizations.name",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "org: _",
         "ordinal": 0,
         "type_info": "Text",
         "origin": {
@@ -15,7 +15,7 @@
         }
       },
       {
-        "name": "name",
+        "name": "org_name: _",
         "ordinal": 1,
         "type_info": "Text",
         "origin": {
@@ -26,13 +26,13 @@
         }
       },
       {
-        "name": "created_by",
+        "name": "role: _",
         "ordinal": 2,
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "organizations",
-            "name": "created_by"
+            "table": "memberships",
+            "name": "role"
           }
         }
       }
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "bea6ed049c957a58c7c9dd92993be541124450599ef56dfa8c641e1a861c773a"
+  "hash": "42b812b827d88510b349ae5b92997418980cd57ac03f629bc6950fa5eba390e2"
 }

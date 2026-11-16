@@ -8,12 +8,13 @@ use utoipa_axum::routes;
 
 use super::AppState;
 use super::error::HttpError;
-use super::health;
 use super::openapi::ApiDoc;
+use super::{accounts, health};
 
 pub fn router(state: AppState) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(health::health))
+        .routes(routes!(accounts::me))
         .split_for_parts();
     router
         .route("/openapi.json", get(move || async move { Json(api) }))

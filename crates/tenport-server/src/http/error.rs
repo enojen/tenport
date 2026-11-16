@@ -4,6 +4,9 @@ use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use utoipa::ToSchema;
 
+#[cfg(test)]
+mod tests;
+
 pub const PROBLEM_JSON: &str = "application/problem+json";
 const BLANK_TYPE: &str = "about:blank";
 
@@ -13,13 +16,23 @@ pub enum HttpError {
     NoRoute { method: Method, path: String },
     #[error("the database does not answer")]
     DatabaseDown(#[source] sqlx::Error),
+    #[error("a valid bearer token is needed")]
+    Unauthorized,
+    #[error("the server failed; see its log")]
+    Internal(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl HttpError {
+    pub fn internal(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::Internal(Box::new(error))
+    }
+
     fn status(&self) -> StatusCode {
         match self {
             Self::NoRoute { .. } => StatusCode::NOT_FOUND,
             Self::DatabaseDown(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -27,6 +40,8 @@ impl HttpError {
         match self {
             Self::NoRoute { .. } => "not-found",
             Self::DatabaseDown(_) => "database-down",
+            Self::Unauthorized => "unauthorized",
+            Self::Internal(_) => "internal",
         }
     }
 }

@@ -10,7 +10,7 @@ pub struct Row {
     pub body: String,
 }
 
-pub async fn insert(conn: &mut SqliteConnection, row: &Row) -> Result<bool, sqlx::Error> {
+pub async fn insert_event(conn: &mut SqliteConnection, row: &Row) -> Result<bool, sqlx::Error> {
     let done = sqlx::query!(
         "insert into events (id, type, subject, actor, at, body) values (?, ?, ?, ?, ?, ?)
          on conflict (id) do nothing",
@@ -26,7 +26,10 @@ pub async fn insert(conn: &mut SqliteConnection, row: &Row) -> Result<bool, sqlx
     Ok(done.rows_affected() == 1)
 }
 
-pub async fn find(conn: &mut SqliteConnection, id: &str) -> Result<Option<Row>, sqlx::Error> {
+pub async fn find_event_by_id(
+    conn: &mut SqliteConnection,
+    id: &str,
+) -> Result<Option<Row>, sqlx::Error> {
     sqlx::query_as!(
         Row,
         r#"select id, type as "kind", subject, actor, at, body from events where id = ?"#,
@@ -37,7 +40,7 @@ pub async fn find(conn: &mut SqliteConnection, id: &str) -> Result<Option<Row>, 
 }
 
 #[cfg(test)]
-pub async fn count(conn: &mut SqliteConnection) -> Result<i64, sqlx::Error> {
+pub async fn count_events(conn: &mut SqliteConnection) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar!("select count(*) from events")
         .fetch_one(conn)
         .await

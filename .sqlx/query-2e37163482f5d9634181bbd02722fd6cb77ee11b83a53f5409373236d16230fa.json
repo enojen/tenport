@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "select id as \"id: OrgId\" from organizations where name = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: OrgId",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "organizations",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2e37163482f5d9634181bbd02722fd6cb77ee11b83a53f5409373236d16230fa"
+}

@@ -8,5 +8,6 @@ pub mod events;
 pub mod http;
 mod lanes;
 pub mod logs;
+pub mod name;
 mod projects;
 mod runs;
