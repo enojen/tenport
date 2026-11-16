@@ -7,7 +7,7 @@ pub mod db;
 pub mod events;
 pub mod http;
 mod id;
-mod lanes;
+pub mod lanes;
 pub mod logs;
 pub mod name;
 pub mod projects;

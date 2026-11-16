@@ -50,3 +50,14 @@ async fn projects_are_added_with_post_and_listed_with_get() {
     assert!(projects["get"]["responses"]["200"].is_object());
     assert!(api["components"]["schemas"]["NewProject"].is_object());
 }
+
+#[tokio::test]
+async fn events_name_their_types() {
+    let api = openapi().await;
+    let text = api["components"]["schemas"]["LanesEvent"].to_string();
+    assert!(
+        text.contains("task.started") && text.contains("task.closed"),
+        "{text}"
+    );
+    assert!(api["paths"]["/events"]["post"]["responses"]["409"].is_object());
+}

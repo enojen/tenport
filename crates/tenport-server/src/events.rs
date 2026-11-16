@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 use crate::db::Db;
-use crate::{accounts, projects};
+use crate::{accounts, lanes, projects};
 
 pub use model::{Actor, Entry, Event, EventId};
 
@@ -27,9 +27,19 @@ pub struct Stamp<'a> {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum ApplyError {
+    #[error("{0}")]
+    Refused(&'static str),
+    #[error(transparent)]
+    Database(#[from] sqlx::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum EventsError {
     #[error("the event {id} was recorded before with other content")]
     Conflict { id: EventId },
+    #[error("the event {id} is refused: {reason}")]
+    Refused { id: EventId, reason: &'static str },
     #[error("cannot encode the event: {0}")]
     Encode(#[from] serde_json::Error),
     #[error("cannot write the time of the event: {0}")]
@@ -51,7 +61,7 @@ impl EventsError {
 
 pub async fn append(db: &Db, actor: Actor, event: Event) -> Result<EventId, EventsError> {
     let entry = new_entry(actor, event, OffsetDateTime::now_utc());
-    write_all(db, slice::from_ref(&entry)).await?;
+    append_entries(db, slice::from_ref(&entry)).await?;
     Ok(entry.id)
 }
 
@@ -65,13 +75,16 @@ pub async fn append_all(
         .into_iter()
         .map(|event| new_entry(actor.clone(), event, at))
         .collect();
-    write_all(db, &entries).await?;
+    append_entries(db, &entries).await?;
     Ok(entries.iter().map(|entry| entry.id).collect())
 }
 
-pub async fn append_entry(db: &Db, entry: &Entry) -> Result<Appended, EventsError> {
+pub async fn append_entries(db: &Db, entries: &[Entry]) -> Result<Vec<Appended>, EventsError> {
     let mut tx = db.begin().await?;
-    let appended = write(&mut tx, entry).await?;
+    let mut appended = Vec::with_capacity(entries.len());
+    for entry in entries {
+        appended.push(write(&mut tx, entry).await?);
+    }
     tx.commit().await?;
     Ok(appended)
 }
@@ -85,21 +98,14 @@ fn new_entry(actor: Actor, event: Event, at: OffsetDateTime) -> Entry {
     }
 }
 
-async fn write_all(db: &Db, entries: &[Entry]) -> Result<(), EventsError> {
-    let mut tx = db.begin().await?;
-    for entry in entries {
-        write(&mut tx, entry).await?;
-    }
-    tx.commit().await?;
-    Ok(())
-}
-
 async fn write(conn: &mut SqliteConnection, entry: &Entry) -> Result<Appended, EventsError> {
     let row = row(entry)?;
     if !store::insert_event(conn, &row).await? {
         return duplicate(conn, &row, entry.id).await;
     }
-    apply(conn, entry, &row).await?;
+    apply(conn, entry, &row)
+        .await
+        .map_err(|error| applied_error(error, entry.id))?;
     Ok(Appended::New)
 }
 
@@ -118,7 +124,7 @@ async fn apply(
     conn: &mut SqliteConnection,
     entry: &Entry,
     row: &store::Row,
-) -> Result<(), EventsError> {
+) -> Result<(), ApplyError> {
     let stamp = Stamp {
         at: &row.at,
         actor: &row.actor,
@@ -126,8 +132,16 @@ async fn apply(
     match &entry.event {
         Event::Accounts(event) => accounts::apply(conn, event, &stamp).await?,
         Event::Projects(event) => projects::apply(conn, event, &stamp).await?,
+        Event::Lanes(event) => lanes::apply(conn, event, &stamp).await?,
     }
     Ok(())
+}
+
+fn applied_error(error: ApplyError, id: EventId) -> EventsError {
+    match error {
+        ApplyError::Refused(reason) => EventsError::Refused { id, reason },
+        ApplyError::Database(error) => EventsError::Database(error),
+    }
 }
 
 fn row(entry: &Entry) -> Result<store::Row, EventsError> {

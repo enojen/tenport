@@ -5,6 +5,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::accounts::{AccountsEvent, UserId};
+use crate::lanes::LanesEvent;
 use crate::projects::ProjectsEvent;
 
 const SERVER_ACTOR: &str = "server";
@@ -45,6 +46,7 @@ impl fmt::Display for Actor {
 pub enum Event {
     Accounts(AccountsEvent),
     Projects(ProjectsEvent),
+    Lanes(LanesEvent),
 }
 
 impl Event {
@@ -52,6 +54,7 @@ impl Event {
         match self {
             Self::Accounts(event) => event.kind(),
             Self::Projects(event) => event.kind(),
+            Self::Lanes(event) => event.kind(),
         }
     }
 
@@ -59,6 +62,7 @@ impl Event {
         match self {
             Self::Accounts(event) => event.subject(),
             Self::Projects(event) => event.subject(),
+            Self::Lanes(event) => event.subject(),
         }
     }
 }

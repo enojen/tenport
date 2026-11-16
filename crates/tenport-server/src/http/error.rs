@@ -23,6 +23,8 @@ pub enum HttpError {
     Unauthorized,
     #[error("{0}")]
     Forbidden(String),
+    #[error("{0}")]
+    Conflict(String),
     #[error("the server failed; see its log")]
     Internal(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
@@ -39,6 +41,7 @@ impl HttpError {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
+            Self::Conflict(_) => StatusCode::CONFLICT,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -50,6 +53,7 @@ impl HttpError {
             Self::BadRequest(_) => "bad-request",
             Self::Unauthorized => "unauthorized",
             Self::Forbidden(_) => "forbidden",
+            Self::Conflict(_) => "conflict",
             Self::Internal(_) => "internal",
         }
     }

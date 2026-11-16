@@ -61,9 +61,12 @@ fn an_unknown_type_is_refused() {
 async fn the_same_event_twice_is_appended_once() {
     let (db, _dir) = db::temp().await;
     let entry = entry(organization_added("Wegobi"));
-    assert_eq!(append_entry(&db, &entry).await.unwrap(), Appended::New);
     assert_eq!(
-        append_entry(&db, &entry).await.unwrap(),
+        append_entries(&db, slice::from_ref(&entry)).await.unwrap()[0],
+        Appended::New
+    );
+    assert_eq!(
+        append_entries(&db, slice::from_ref(&entry)).await.unwrap()[0],
         Appended::Duplicate
     );
     assert_eq!(events_in(&db).await, 1);
@@ -73,12 +76,14 @@ async fn the_same_event_twice_is_appended_once() {
 async fn the_same_id_with_other_content_is_a_conflict() {
     let (db, _dir) = db::temp().await;
     let first = entry(organization_added("Wegobi"));
-    append_entry(&db, &first).await.unwrap();
+    append_entries(&db, slice::from_ref(&first)).await.unwrap();
     let second = Entry {
         event: organization_added("Other"),
         ..first.clone()
     };
-    let error = append_entry(&db, &second).await.unwrap_err();
+    let error = append_entries(&db, slice::from_ref(&second))
+        .await
+        .unwrap_err();
     assert!(
         matches!(error, EventsError::Conflict { id } if id == first.id),
         "{error}"

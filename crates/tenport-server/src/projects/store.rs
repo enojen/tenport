@@ -1,6 +1,6 @@
 use sqlx::SqliteConnection;
 
-use super::model::{Project, ProjectAdded};
+use super::model::{Project, ProjectAdded, ProjectId};
 use crate::accounts::UserId;
 use crate::events::Stamp;
 
@@ -38,5 +38,21 @@ pub async fn list_projects_of_user(
         user,
     )
     .fetch_all(conn)
+    .await
+}
+
+pub async fn find_project_of_member(
+    conn: &mut SqliteConnection,
+    project: &ProjectId,
+    user: &UserId,
+) -> Result<Option<ProjectId>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"select projects.id as "id: ProjectId"
+           from projects join memberships on memberships.org_id = projects.org_id
+           where projects.id = ? and memberships.user_id = ?"#,
+        project,
+        user,
+    )
+    .fetch_optional(conn)
     .await
 }

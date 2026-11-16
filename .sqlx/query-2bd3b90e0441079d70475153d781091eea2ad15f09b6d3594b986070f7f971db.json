@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "select projects.id as \"id: ProjectId\"\n           from projects join memberships on memberships.org_id = projects.org_id\n           where projects.id = ? and memberships.user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: ProjectId",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2bd3b90e0441079d70475153d781091eea2ad15f09b6d3594b986070f7f971db"
+}
