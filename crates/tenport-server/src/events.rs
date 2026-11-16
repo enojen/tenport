@@ -10,8 +10,8 @@ use sqlx::SqliteConnection;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use crate::accounts;
 use crate::db::Db;
+use crate::{accounts, projects};
 
 pub use model::{Actor, Entry, Event, EventId};
 
@@ -125,6 +125,7 @@ async fn apply(
     };
     match &entry.event {
         Event::Accounts(event) => accounts::apply(conn, event, &stamp).await?,
+        Event::Projects(event) => projects::apply(conn, event, &stamp).await?,
     }
     Ok(())
 }

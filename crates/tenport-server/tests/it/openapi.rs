@@ -40,3 +40,13 @@ async fn me_needs_a_bearer_token() {
         "bearer"
     );
 }
+
+#[tokio::test]
+async fn projects_are_added_with_post_and_listed_with_get() {
+    let api = openapi().await;
+    let projects = &api["paths"]["/projects"];
+    assert!(projects["post"]["responses"]["201"].is_object());
+    assert!(projects["post"]["responses"]["403"].is_object());
+    assert!(projects["get"]["responses"]["200"].is_object());
+    assert!(api["components"]["schemas"]["NewProject"].is_object());
+}
