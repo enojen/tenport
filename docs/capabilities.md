@@ -84,14 +84,49 @@ What the Claude Code docs say (checked 2026-11-16):
 | When a babysitter writes its "work done" report, Tenport wakes the planner | Decided |
 | An agent runs on the user's computer or on the server. The state is always in Tenport | Decided |
 | Tenport always starts a server agent. It writes "who started it" and "which project" into the pod. Claude Code does not know whose it is; Tenport tells it | Decided |
-| An agent on the computer calls Tenport with the user's login token. An agent in a pod calls it with a token that Tenport gives for that run | Proposed |
-| `tenbox planner start` starts the planner on the computer, in the current repository | Proposed |
+| An agent on the computer calls Tenport with the user's login token, and sends its own agent id with each command. Tenport checks that the agent is the user's, and the log says "the user, through this agent" | Decided, 2026-11-16 |
+| An agent registers itself from inside its own session: Claude Code, OpenCode or another coding agent runs `tenbox planner start` or `tenbox babysitter start`. Tenport writes `agent.started` and gives an agent id; the CLI keeps it in `.tenbox/agent.json` in the agent's folder, which git ignores. One agent per folder: the planner in the project, each babysitter in its lane's worktree | Decided, 2026-11-16 |
+| An agent in a pod calls Tenport with a token that Tenport gives for that run | Open: decided with the server agents |
 | `tenbox planner start --server --claude personal` starts it on the server with the named subscription | Proposed |
 | `tenbox lane new <name>` is run by the planner. The lane's babysitter starts on the server and uses the subscription of the person who started the planner | Proposed |
 | The panel's Chat button opens the agent's session, wherever the agent runs | Proposed |
 | A commit on the computer uses the user's git settings. A commit in a pod uses the App's name, with the person who started it as a `Co-authored-by` line | Proposed |
 | The `agents` part of `tenbox.yaml` gives the model and the skills of the planner and the babysitter | Proposed |
 | "Start planner" and "Stop" buttons in the panel, or only in the CLI. In the panel, they would be the first exception to "the panel only shows" | Open |
+
+### Messages between agents (proposed)
+
+The planner and the babysitters talk through Tenport. There is no second service.
+
+1. An agent runs `tenbox message <to> "<text>"`. Tenport writes `message.sent` and opens an
+   unread row for the receiver, as it does for a question.
+2. The receiver reads with `tenbox inbox`, and the row closes.
+3. Every message goes through Tenport, so the panel and the audit log show it.
+4. An agent talks only to its own planner or to its own babysitters, so that two agents do not
+   answer each other without end.
+
+An agent that waits must wake up when a message comes. In Claude Code, `/loop` can run
+`tenbox inbox` again and again; `tenbox inbox --wait` works for any coding agent. Which one works
+best is tried when the agents are built.
+
+### A lane that runs on its own (proposed)
+
+The babysitter takes its lane's tasks to the end without the user, but never to `main`.
+
+1. Each lane has its own branch, made from `main`. Each task opens its PR into the lane branch.
+2. The babysitter merges a task's PR into the lane branch itself, only after the proof loop
+   passes.
+3. The user reads one PR, the lane branch into `main`, and merges it.
+
+The proof loop of each task, in this order:
+
+1. A real repro first: a failing test or a real run that shows the bug or the missing work.
+2. A test that is red before the change and green after it.
+3. The checks of the project pass.
+4. A real run of the change.
+5. An independent review, by an agent that did not write the code.
+
+When a step fails again and again, the babysitter stops and asks the user (`question.asked`).
 
 ## 5. Runs on the cluster
 
@@ -127,6 +162,13 @@ transaction it updates the tables that hold the state now, and the SSE stream te
 - A broken table can be built again from the log. Tenport does not replay the log on each
   start: this is not full event sourcing.
 - Each event type is a Rust type, with one function that updates the tables.
+- Every command that changes the state sends an event, from a person or from an agent. A command
+  that only reads, such as `status`, sends none. Tenport writes who did it from the token, so the
+  log is the audit (decided, 2026-11-16).
+- An event type that is out only gets new fields, and a new field is optional. A field never
+  changes its meaning; a new meaning is a new event type. So an older CLI keeps working, and an
+  event needs no version field. Tenport refuses an unknown type, and the CLI then says to update
+  tenbox (decided, 2026-11-16).
 
 A question, for example (the details wait until the work reaches it):
 
@@ -160,6 +202,45 @@ Rules from the panel's RAM measurements (2026-11-15). Low browser RAM is the use
 - The plan, build and close workflows and the skills: they stay with the agents. They write their
   state to Tenport instead of to local files.
 - The cluster's manifests and Secrets: they stay in the `tenyard` repository.
+
+## 9. The move from the tenbox server
+
+Tenport takes over every job of the tenbox server, one PR at a time. When the cluster runs Tenport
+in its place, `server/` and the parts that only it uses are deleted from tenbox. The live server
+runs the image of tenbox commit `71dbd66`; no commit after it changes the server.
+
+What the tenbox server does, and where Tenport is:
+
+| The tenbox server | Tenport |
+|---|---|
+| `GET /health`, `GET /openapi.json` | Done |
+| Users, organizations, memberships (`admin` or `member`), tokens; each request needs a user token | Done |
+| `project add` command: a repository joins an organization as a project | Done as `POST /projects` and `GET /projects` |
+| `POST /events`: takes the task events; an id that comes twice is stored once. The tenbox CLI never sends them: only the route exists | Step 1 |
+| `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Step 2 |
+| A placeholder Secret for each new Job | Step 2 |
+| `job.finished` when a box container ends, with the OOM count and the close output from the pod log | Step 2 |
+| `GET /tasks/{task}/runs`: the runs of a task | Step 2 |
+| Nodes, every 30 seconds: a worker that comes or goes, with its Hetzner type and hourly price | Step 3 |
+| Task volumes, every 30 seconds: opened and deleted, with their price. A closed task's volume is deleted after the grace period; an idle open volume sends a notice to ntfy | Step 3 |
+| `GET /costs?from&to`: what the workers and the volumes cost, with each task's share; organization admins only | Step 4 |
+| `costs --from --to` command: the same report from a read-only database | Step 4 |
+| `GET /metrics`: the hourly price of each worker and task volume that is up, for Prometheus | Step 4 |
+| `user add` command: a new user; the token shows once, in its output | Step 5 |
+| `backup --to <file>` command: a copy of the database. A CronJob runs it each day at 03:00 and keeps 7 days | Step 5 |
+| `GET /docs`: the Swagger page | Step 5 |
+
+The steps, in order:
+
+1. `POST /events`, and the CLI sends its events to it.
+2. Runs: `/run-credentials` with the injector token, the placeholder Secrets, `job.finished` and
+   `GET /tasks/{task}/runs`.
+3. The cluster watches: nodes, volumes, the volume deletion and the ntfy notice.
+4. Costs: `GET /costs`, the `costs` command and `GET /metrics`.
+5. The `user add` and `backup` commands and `/docs`.
+6. The move: copy the tenbox data into Tenport, build Tenport's image, and put it in place of
+   the tenbox server in tenyard's manifests.
+7. Delete `server/` and the parts that only it uses from tenbox.
 
 ## Open questions
 
