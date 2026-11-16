@@ -44,6 +44,9 @@ pub struct Problem {
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
         let status = self.status();
+        if status.is_server_error() {
+            tracing::error!(error = %self, source = ?std::error::Error::source(&self), "request failed");
+        }
         let problem = Problem {
             kind: BLANK_TYPE,
             title: status.canonical_reason().unwrap_or("Error"),

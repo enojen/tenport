@@ -7,5 +7,6 @@ pub mod db;
 mod events;
 pub mod http;
 mod lanes;
+pub mod logs;
 mod projects;
 mod runs;
