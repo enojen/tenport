@@ -2,8 +2,9 @@ use axum::Json;
 use axum::http::{Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
+use utoipa::ToSchema;
 
-const PROBLEM_JSON: &str = "application/problem+json";
+pub const PROBLEM_JSON: &str = "application/problem+json";
 const BLANK_TYPE: &str = "about:blank";
 
 #[derive(Debug, thiserror::Error)]
@@ -30,8 +31,8 @@ impl HttpError {
     }
 }
 
-#[derive(Serialize)]
-struct Problem {
+#[derive(Serialize, ToSchema)]
+pub struct Problem {
     #[serde(rename = "type")]
     kind: &'static str,
     title: &'static str,
