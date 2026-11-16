@@ -1,0 +1,10 @@
+[package]
+name = "procs"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license-file.workspace = true
+description = "Per-group CPU and memory of the processes in one box pod, as Prometheus metrics"
+
+[dependencies]
+regex = "1.13.1"
