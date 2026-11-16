@@ -4,6 +4,8 @@ mod store;
 #[cfg(test)]
 mod tests;
 
+use std::slice;
+
 use sqlx::SqliteConnection;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -37,33 +39,67 @@ pub enum EventsError {
 }
 
 impl EventsError {
-    pub fn is_unique_violation(&self) -> bool {
+    pub fn violates_unique(&self, column: &str) -> bool {
         match self {
-            Self::Database(sqlx::Error::Database(error)) => error.is_unique_violation(),
+            Self::Database(sqlx::Error::Database(error)) => {
+                error.is_unique_violation() && error.message().contains(column)
+            }
             _ => false,
         }
     }
 }
 
 pub async fn append(db: &Db, actor: Actor, event: Event) -> Result<EventId, EventsError> {
-    let entry = Entry {
-        id: EventId::now(),
-        at: OffsetDateTime::now_utc(),
-        actor,
-        event,
-    };
-    append_entry(db, &entry).await?;
+    let entry = new_entry(actor, event, OffsetDateTime::now_utc());
+    write_all(db, slice::from_ref(&entry)).await?;
     Ok(entry.id)
 }
 
+pub async fn append_all(
+    db: &Db,
+    actor: Actor,
+    events: Vec<Event>,
+) -> Result<Vec<EventId>, EventsError> {
+    let at = OffsetDateTime::now_utc();
+    let entries: Vec<Entry> = events
+        .into_iter()
+        .map(|event| new_entry(actor.clone(), event, at))
+        .collect();
+    write_all(db, &entries).await?;
+    Ok(entries.iter().map(|entry| entry.id).collect())
+}
+
 pub async fn append_entry(db: &Db, entry: &Entry) -> Result<Appended, EventsError> {
-    let row = row(entry)?;
     let mut tx = db.begin().await?;
-    if !store::insert(&mut tx, &row).await? {
-        return duplicate(&mut tx, &row, entry.id).await;
-    }
-    apply(&mut tx, entry, &row).await?;
+    let appended = write(&mut tx, entry).await?;
     tx.commit().await?;
+    Ok(appended)
+}
+
+fn new_entry(actor: Actor, event: Event, at: OffsetDateTime) -> Entry {
+    Entry {
+        id: EventId::now(),
+        at,
+        actor,
+        event,
+    }
+}
+
+async fn write_all(db: &Db, entries: &[Entry]) -> Result<(), EventsError> {
+    let mut tx = db.begin().await?;
+    for entry in entries {
+        write(&mut tx, entry).await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn write(conn: &mut SqliteConnection, entry: &Entry) -> Result<Appended, EventsError> {
+    let row = row(entry)?;
+    if !store::insert_event(conn, &row).await? {
+        return duplicate(conn, &row, entry.id).await;
+    }
+    apply(conn, entry, &row).await?;
     Ok(Appended::New)
 }
 
@@ -72,7 +108,7 @@ async fn duplicate(
     row: &store::Row,
     id: EventId,
 ) -> Result<Appended, EventsError> {
-    match store::find(conn, &row.id).await? {
+    match store::find_event_by_id(conn, &row.id).await? {
         Some(existing) if existing == *row => Ok(Appended::Duplicate),
         _ => Err(EventsError::Conflict { id }),
     }

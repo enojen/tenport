@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "insert into memberships (org_id, user_id, role, created_at, created_by)\n         values (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "ab77d9698a03c3c0c131448a6746caa084efb59c0a48635c127eaa5e4a116163"
+}

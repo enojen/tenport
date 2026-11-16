@@ -14,6 +14,7 @@ What Tenport must do. Each item has a status:
 | A user has a name, a GitHub login and an email | Today |
 | A user calls the API with a bearer token. The server stores only the token's hash | Today |
 | A user is added by hand with a server command (`user add`) | Today; login below replaces it |
+| The first admin: a setting of the server names the owner's GitHub login. That person becomes admin on their first GitHub login; nobody else can. No sign-up screen, no server command | Decided |
 | A person logs in from the panel, or with `tenbox login`: the CLI shows a code and the person confirms it in the browser | Decided |
 | Login is with GitHub only | Open |
 | An organization is Tenyard's own group of users and projects. It is not a GitHub organization | Decided |

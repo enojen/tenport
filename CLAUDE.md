@@ -12,6 +12,9 @@ what it must do.
 - `tenport-server` is one crate. Its modules follow the topics, not the layers: `accounts`,
   `projects`, `lanes`, `agents`, `runs`, `events`, `costs`, `cluster`. A topic folder has
   `model.rs` (types and rules) and `store.rs` (SQL).
+- A `store.rs` function starts with its verb: `find_` returns one row or none
+  (`find_user_by_token_hash`), `list_` a `Vec` (`list_memberships_of_user`), `count_` a number,
+  `insert_` writes.
 - Only `http/` knows axum: the router, auth, the error responses, OpenAPI, the panel's `sse`
   stream, and one file of endpoints per topic. A topic never imports `http`.
 - No `mod.rs`: `foo.rs` next to the folder `foo/`. No module named `utils`, `helpers` or `common`.
@@ -19,6 +22,9 @@ what it must do.
 ## Code
 
 - An id is a newtype (`UserId(String)`), never a bare `String`. A state is an enum.
+- A value with rules is a type that can only be made valid: `Name::parse`, `GithubLogin::parse`,
+  `Token::parse`. Parse once at the edge (HTTP, JSON through `serde(try_from)`); the code
+  inside never checks again. No validation library.
 - Each module has its own error type with `thiserror`, named `<Module>Error`: `ConfigError`,
   `DbError`, `HttpError`. `anyhow` only in `main.rs`.
 - A trait only when it has two real implementations, such as a clock or the Kubernetes client
