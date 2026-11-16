@@ -54,7 +54,7 @@ async fn projects_are_added_with_post_and_listed_with_get() {
 #[tokio::test]
 async fn events_name_their_types() {
     let api = openapi().await;
-    let text = api["components"]["schemas"]["LanesEvent"].to_string();
+    let text = api["components"]["schemas"]["TasksEvent"].to_string();
     assert!(
         text.contains("task.started") && text.contains("task.closed"),
         "{text}"

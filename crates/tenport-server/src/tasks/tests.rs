@@ -3,6 +3,7 @@ use crate::accounts::{self, GithubLogin, NewUser, Registered, Registration, Role
 use crate::db;
 use crate::name::Name;
 use crate::projects::{NewProject, Repo};
+use crate::tracker::TrackerUrl;
 
 async fn register(db: &Db, org: &str, github: &str) -> Registered {
     let registration = Registration {
@@ -30,7 +31,7 @@ async fn project_of(db: &Db, owner: &Registered) -> ProjectId {
 }
 
 fn started(project: &ProjectId, task: &str) -> Reported {
-    reported(LanesEvent::TaskStarted(TaskStarted {
+    reported(TasksEvent::TaskStarted(TaskStarted {
         project: project.clone(),
         task: TaskId::parse(task).unwrap(),
         title: Some(Name::parse("Add projects").unwrap()),
@@ -39,13 +40,13 @@ fn started(project: &ProjectId, task: &str) -> Reported {
 }
 
 fn closed(project: &ProjectId, task: &str) -> Reported {
-    reported(LanesEvent::TaskClosed(TaskClosed {
+    reported(TasksEvent::TaskClosed(TaskClosed {
         project: project.clone(),
         task: TaskId::parse(task).unwrap(),
     }))
 }
 
-fn reported(event: LanesEvent) -> Reported {
+fn reported(event: TasksEvent) -> Reported {
     Reported {
         id: EventId::now(),
         at: OffsetDateTime::now_utc(),
@@ -64,11 +65,11 @@ async fn a_started_task_is_open_until_it_is_closed() {
     let (db, _dir) = db::temp().await;
     let owner = register(&db, "Wegobi", "enojen").await;
     let project = project_of(&db, &owner).await;
-    record(&db, &owner.user, vec![started(&project, "TEN-1")])
+    record_events(&db, &owner.user, vec![started(&project, "TEN-1")])
         .await
         .unwrap();
     assert_eq!(open_tasks(&db).await, 1);
-    record(&db, &owner.user, vec![closed(&project, "TEN-1")])
+    record_events(&db, &owner.user, vec![closed(&project, "TEN-1")])
         .await
         .unwrap();
     assert_eq!(open_tasks(&db).await, 0);
@@ -80,8 +81,10 @@ async fn the_same_events_sent_again_are_skipped() {
     let owner = register(&db, "Wegobi", "enojen").await;
     let project = project_of(&db, &owner).await;
     let batch = vec![started(&project, "TEN-1"), closed(&project, "TEN-1")];
-    let first = record(&db, &owner.user, batch.clone()).await.unwrap();
-    let again = record(&db, &owner.user, batch).await.unwrap();
+    let first = record_events(&db, &owner.user, batch.clone())
+        .await
+        .unwrap();
+    let again = record_events(&db, &owner.user, batch).await.unwrap();
     assert_eq!(
         first,
         Recorded {
@@ -103,13 +106,13 @@ async fn closing_a_task_that_never_started_is_refused() {
     let (db, _dir) = db::temp().await;
     let owner = register(&db, "Wegobi", "enojen").await;
     let project = project_of(&db, &owner).await;
-    let error = record(&db, &owner.user, vec![closed(&project, "TEN-1")])
+    let error = record_events(&db, &owner.user, vec![closed(&project, "TEN-1")])
         .await
         .unwrap_err();
     assert!(
         matches!(
             error,
-            LanesError::Events(EventsError::Refused {
+            TasksError::Events(EventsError::Refused {
                 reason: "the task is not open",
                 ..
             })
@@ -123,16 +126,16 @@ async fn a_task_is_started_once() {
     let (db, _dir) = db::temp().await;
     let owner = register(&db, "Wegobi", "enojen").await;
     let project = project_of(&db, &owner).await;
-    record(&db, &owner.user, vec![started(&project, "TEN-1")])
+    record_events(&db, &owner.user, vec![started(&project, "TEN-1")])
         .await
         .unwrap();
-    let error = record(&db, &owner.user, vec![started(&project, "TEN-1")])
+    let error = record_events(&db, &owner.user, vec![started(&project, "TEN-1")])
         .await
         .unwrap_err();
     assert!(
         matches!(
             error,
-            LanesError::Events(EventsError::Refused {
+            TasksError::Events(EventsError::Refused {
                 reason: "the task is started already",
                 ..
             })
@@ -147,7 +150,7 @@ async fn a_refused_event_leaves_the_whole_batch_out() {
     let owner = register(&db, "Wegobi", "enojen").await;
     let project = project_of(&db, &owner).await;
     let batch = vec![started(&project, "TEN-1"), closed(&project, "TEN-2")];
-    record(&db, &owner.user, batch).await.unwrap_err();
+    record_events(&db, &owner.user, batch).await.unwrap_err();
     assert_eq!(open_tasks(&db).await, 0);
 }
 
@@ -157,11 +160,11 @@ async fn only_a_member_of_the_organization_reports_its_tasks() {
     let owner = register(&db, "Wegobi", "enojen").await;
     let stranger = register(&db, "Other", "ali").await;
     let project = project_of(&db, &owner).await;
-    let error = record(&db, &stranger.user, vec![started(&project, "TEN-1")])
+    let error = record_events(&db, &stranger.user, vec![started(&project, "TEN-1")])
         .await
         .unwrap_err();
     assert!(
-        matches!(&error, LanesError::NotMember { project: refused } if *refused == project),
+        matches!(&error, TasksError::NotMember { project: refused } if *refused == project),
         "{error}"
     );
     assert_eq!(open_tasks(&db).await, 0);
@@ -178,20 +181,12 @@ fn a_task_id_follows_the_tenbox_rule() {
 }
 
 #[test]
-fn a_tracker_url_is_an_http_link() {
-    assert!(TrackerUrl::parse("https://app.clickup.com/t/abc").is_ok());
-    for bad in ["", "https://", "ftp://x", "https://a b", "app.clickup.com"] {
-        assert_eq!(TrackerUrl::parse(bad), Err(TrackerUrlError), "{bad:?}");
-    }
-}
-
-#[test]
 fn an_event_without_a_title_or_url_still_reads() {
     let body = serde_json::json!({ "type": "task.started", "project": "k7f3qa", "task": "TEN-1" });
-    let event: LanesEvent = serde_json::from_value(body).unwrap();
+    let event: TasksEvent = serde_json::from_value(body).unwrap();
     assert!(matches!(
         event,
-        LanesEvent::TaskStarted(TaskStarted {
+        TasksEvent::TaskStarted(TaskStarted {
             title: None,
             url: None,
             ..

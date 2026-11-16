@@ -9,7 +9,7 @@ use super::AppState;
 use super::auth::CurrentUser;
 use super::error::{HttpError, PROBLEM_JSON, Problem};
 use crate::events::{EventId, EventsError};
-use crate::lanes::{self, LanesError, LanesEvent, Reported};
+use crate::tasks::{self, Reported, TasksError, TasksEvent};
 
 #[derive(Deserialize, ToSchema)]
 pub struct ReportedEvent {
@@ -19,7 +19,7 @@ pub struct ReportedEvent {
     #[schema(value_type = String, format = DateTime)]
     at: OffsetDateTime,
     #[serde(flatten)]
-    event: LanesEvent,
+    event: TasksEvent,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -55,7 +55,7 @@ pub async fn record_events(
             event: event.event,
         })
         .collect();
-    let recorded = lanes::record(&state.db, &user.id, reported)
+    let recorded = tasks::record_events(&state.db, &user.id, reported)
         .await
         .map_err(record_error)?;
     Ok(Json(Recorded {
@@ -64,10 +64,10 @@ pub async fn record_events(
     }))
 }
 
-fn record_error(error: LanesError) -> HttpError {
+fn record_error(error: TasksError) -> HttpError {
     match error {
-        LanesError::NotMember { .. } => HttpError::Forbidden(error.to_string()),
-        LanesError::Events(EventsError::Conflict { .. } | EventsError::Refused { .. }) => {
+        TasksError::NotMember { .. } => HttpError::Forbidden(error.to_string()),
+        TasksError::Events(EventsError::Conflict { .. } | EventsError::Refused { .. }) => {
             HttpError::Conflict(error.to_string())
         }
         other => HttpError::internal(other),
