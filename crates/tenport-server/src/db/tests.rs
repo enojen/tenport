@@ -46,3 +46,12 @@ async fn names_the_path_it_cannot_open() {
     let error = open(&path).await.unwrap_err();
     assert!(error.to_string().contains("missing/tenport.db"), "{error}");
 }
+
+#[tokio::test]
+async fn answers_a_ping_until_it_is_closed() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open(&dir.path().join("tenport.db")).await.unwrap();
+    assert!(ping(&db).await.is_ok());
+    db.close().await;
+    assert!(ping(&db).await.is_err());
+}

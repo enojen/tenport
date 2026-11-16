@@ -5,7 +5,7 @@ pub mod config;
 mod costs;
 pub mod db;
 mod events;
-mod http;
+pub mod http;
 mod lanes;
 mod projects;
 mod runs;

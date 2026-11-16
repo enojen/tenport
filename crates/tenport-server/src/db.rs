@@ -38,3 +38,7 @@ pub async fn open(path: &Path) -> Result<Db, DbError> {
     MIGRATOR.run(&db).await?;
     Ok(db)
 }
+
+pub async fn ping(db: &Db) -> Result<(), sqlx::Error> {
+    sqlx::query("select 1").execute(db).await.map(|_| ())
+}
