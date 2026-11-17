@@ -303,8 +303,9 @@ The steps, in order:
      when the Job is gone (10 minutes after it ends) and no `run.finished` is stored yet.
      `reason` is the box container's, such as `OOMKilled` or `CreateContainerConfigError`.
      404 for a run Tenport does not know, 403 for a user outside the project's organization.
-     The log does not wait: 409 when the box container has not started (with its reason) or
-     the Job is gone; the CLI waits and asks again, as it does today.
+     The log does not wait. When the box container has not started, it answers 409 with the
+     code `box-not-started`, the reason, and `Retry-After: 5`: the client asks again after 5
+     seconds. When the Job is gone, 409 with the code `job-gone`: asking again does not help.
    - Then the image of tenport main in tenyard, and a real run.
    - Deleting a task moves to step 4: with no task volumes, a task has only its bucket archive
      to delete, and that needs the bucket keys of step 4.

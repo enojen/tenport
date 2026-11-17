@@ -1090,7 +1090,17 @@
                 }
               }
             },
-            "description": "The box container has not started, or the Job is gone"
+            "description": "The box container has not started (code box-not-started; ask again after Retry-After seconds), or the Job is gone (code job-gone)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before asking again; only with box-not-started",
+                "schema": {
+                  "format": "int32",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              }
+            }
           }
         },
         "security": [

@@ -294,9 +294,11 @@ async fn the_log_of_a_run_whose_box_has_not_started_is_a_conflict_with_the_reaso
     server.cluster.set_pod(&JobName::new(&name), pod, "");
     let response = get(&server, &token, &format!("/runs/{name}/log")).await;
     assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(response.headers()["retry-after"], "5");
     let problem: Value = response.json().await.unwrap();
     let detail = problem["detail"].as_str().unwrap();
     assert!(detail.contains("CreateContainerConfigError"), "{detail}");
+    assert_eq!(problem["code"], "box-not-started");
 }
 
 #[tokio::test]
@@ -307,7 +309,9 @@ async fn the_log_of_a_stopped_run_is_a_conflict_that_says_the_job_is_gone() {
     delete(&server, &token, &format!("/runs/{name}")).await;
     let response = get(&server, &token, &format!("/runs/{name}/log")).await;
     assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert!(response.headers().get("retry-after").is_none());
     let problem: Value = response.json().await.unwrap();
     let detail = problem["detail"].as_str().unwrap();
     assert!(detail.contains("its Job is gone"), "{detail}");
+    assert_eq!(problem["code"], "job-gone");
 }

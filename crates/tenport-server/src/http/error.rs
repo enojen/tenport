@@ -2,7 +2,7 @@ use std::error::Error as StdError;
 
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::http::{Method, StatusCode, header};
+use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use utoipa::ToSchema;
@@ -12,6 +12,7 @@ mod tests;
 
 pub const PROBLEM_JSON: &str = "application/problem+json";
 const BLANK_TYPE: &str = "about:blank";
+const BOX_START_RETRY_SECONDS: &str = "5";
 
 #[derive(Debug, thiserror::Error)]
 pub enum HttpError {
@@ -31,6 +32,10 @@ pub enum HttpError {
     Conflict(String),
     #[error("{0}")]
     MachineBusy(String),
+    #[error("{0}")]
+    BoxNotStarted(String),
+    #[error("{0}")]
+    JobGone(String),
     #[error("the server failed; see its log")]
     Internal(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
@@ -47,8 +52,18 @@ impl HttpError {
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
-            Self::Conflict(_) | Self::MachineBusy(_) => StatusCode::CONFLICT,
+            Self::Conflict(_)
+            | Self::MachineBusy(_)
+            | Self::BoxNotStarted(_)
+            | Self::JobGone(_) => StatusCode::CONFLICT,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    fn retry_after(&self) -> Option<&'static str> {
+        match self {
+            Self::BoxNotStarted(_) => Some(BOX_START_RETRY_SECONDS),
+            _ => None,
         }
     }
 
@@ -61,6 +76,8 @@ impl HttpError {
             Self::Forbidden(_) => "forbidden",
             Self::Conflict(_) => "conflict",
             Self::MachineBusy(_) => "machine-busy",
+            Self::BoxNotStarted(_) => "box-not-started",
+            Self::JobGone(_) => "job-gone",
             Self::Internal(_) => "internal",
         }
     }
@@ -134,11 +151,18 @@ impl IntoResponse for HttpError {
             detail: self.to_string(),
             code: self.code(),
         };
-        (
+        let retry_after = self.retry_after();
+        let mut response = (
             status,
             [(header::CONTENT_TYPE, PROBLEM_JSON)],
             Json(problem),
         )
-            .into_response()
+            .into_response();
+        if let Some(seconds) = retry_after {
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from_static(seconds));
+        }
+        response
     }
 }

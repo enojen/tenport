@@ -187,7 +187,8 @@ pub async fn find_run(
         (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
         (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
         (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
-        (status = CONFLICT, description = "The box container has not started, or the Job is gone", body = Problem, content_type = PROBLEM_JSON),
+        (status = CONFLICT, description = "The box container has not started (code box-not-started; ask again after Retry-After seconds), or the Job is gone (code job-gone)", body = Problem, content_type = PROBLEM_JSON,
+            headers(("Retry-After" = u32, description = "Seconds to wait before asking again; only with box-not-started"))),
     ),
 )]
 pub async fn read_log(
@@ -245,9 +246,8 @@ fn run_error(error: RunsError) -> HttpError {
     match error {
         RunsError::NotMember { .. } => HttpError::Forbidden(error.to_string()),
         RunsError::NotFound { .. } => HttpError::NotFound(error.to_string()),
-        RunsError::NotStarted { .. } | RunsError::JobGone { .. } => {
-            HttpError::Conflict(error.to_string())
-        }
+        RunsError::NotStarted { .. } => HttpError::BoxNotStarted(error.to_string()),
+        RunsError::JobGone { .. } => HttpError::JobGone(error.to_string()),
         other => HttpError::internal(other),
     }
 }
