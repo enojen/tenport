@@ -298,3 +298,16 @@ async fn the_log_of_a_run_whose_box_has_not_started_is_a_conflict_with_the_reaso
     let detail = problem["detail"].as_str().unwrap();
     assert!(detail.contains("CreateContainerConfigError"), "{detail}");
 }
+
+#[tokio::test]
+async fn the_log_of_a_stopped_run_is_a_conflict_that_says_the_job_is_gone() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let (_, name) = started_run(&server, &token).await;
+    delete(&server, &token, &format!("/runs/{name}")).await;
+    let response = get(&server, &token, &format!("/runs/{name}/log")).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let problem: Value = response.json().await.unwrap();
+    let detail = problem["detail"].as_str().unwrap();
+    assert!(detail.contains("its Job is gone"), "{detail}");
+}

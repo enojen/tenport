@@ -163,8 +163,10 @@ impl Runs {
         follow: bool,
     ) -> Result<LogReader, RunsError> {
         let run = find_for_member(db, user, name).await?;
-        let job = JobName::new(run.name.as_str());
-        let pod = self.cluster.find_pod(&job).await?;
+        let Some(job) = self.job_of(&run).await? else {
+            return Err(RunsError::JobGone { run: run.name });
+        };
+        let pod = self.cluster.find_pod(&job.name).await?;
         let pod = pod.ok_or_else(|| RunsError::NotStarted {
             run: run.name.clone(),
             reason: None,
