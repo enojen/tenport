@@ -4,54 +4,14 @@ use super::*;
 use crate::accounts::{self, GithubLogin, NewUser, Registered, Registration, Role};
 use std::time::Duration;
 
-use futures::FutureExt;
-use futures::future::{BoxFuture, join_all};
-use k8s_openapi::api::batch::v1::Job;
+use futures::future::join_all;
 
-use crate::cluster::{FakeCluster, JobName, PodName};
+use crate::cluster::{FakeCluster, JobName};
 use crate::db;
 use crate::projects::{NewProject, Repo};
 
 const STARTED_TOGETHER: usize = 8;
 const CREATE_TIME: Duration = Duration::from_millis(50);
-
-struct SlowCreateCluster(FakeCluster);
-
-impl Cluster for SlowCreateCluster {
-    fn create_job(&self, job: Job) -> BoxFuture<'_, Result<JobName, ClusterError>> {
-        async move {
-            tokio::time::sleep(CREATE_TIME).await;
-            self.0.create_job(job).await
-        }
-        .boxed()
-    }
-
-    fn list_jobs<'a>(
-        &'a self,
-        selector: &'a str,
-    ) -> BoxFuture<'a, Result<Vec<JobState>, ClusterError>> {
-        self.0.list_jobs(selector)
-    }
-
-    fn find_pod<'a>(
-        &'a self,
-        job: &'a JobName,
-    ) -> BoxFuture<'a, Result<Option<PodState>, ClusterError>> {
-        self.0.find_pod(job)
-    }
-
-    fn read_log<'a>(
-        &'a self,
-        pod: &'a PodName,
-        read: LogRead,
-    ) -> BoxFuture<'a, Result<LogReader, ClusterError>> {
-        self.0.read_log(pod, read)
-    }
-
-    fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {
-        self.0.delete_job(job)
-    }
-}
 
 async fn register(db: &Db, org: &str, github: &str) -> Registered {
     let registration = Registration {
@@ -78,7 +38,7 @@ async fn project_of(db: &Db, owner: &Registered) -> ProjectId {
     projects::add(db, &owner.user, new).await.unwrap().id
 }
 
-fn runs_on(cluster: Arc<dyn Cluster>) -> Runs {
+fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
     let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
     let template = RunTemplate {
         dir: tests.join("run-template"),
@@ -149,7 +109,7 @@ async fn runs_of_the_task_started_together_make_one_job() {
     let (db, _dir) = db::temp().await;
     let owner = register(&db, "Wegobi", "enojen").await;
     let project = project_of(&db, &owner).await;
-    let cluster = Arc::new(SlowCreateCluster(FakeCluster::default()));
+    let cluster = Arc::new(FakeCluster::with_create_time(CREATE_TIME));
     let runs = runs_on(cluster.clone());
     let starts = (0..STARTED_TOGETHER).map(|_| runs.start(&db, &owner.user, build(&project)));
     let started = join_all(starts).await;
@@ -158,7 +118,7 @@ async fn runs_of_the_task_started_together_make_one_job() {
         .filter(|started| matches!(started, Err(RunsError::Busy { .. })))
         .count();
     assert_eq!(busy, STARTED_TOGETHER - 1);
-    assert_eq!(cluster.0.jobs().len(), 1);
+    assert_eq!(cluster.jobs().len(), 1);
 }
 
 #[tokio::test]

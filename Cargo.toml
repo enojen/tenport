@@ -32,7 +32,7 @@ uuid = { version = "1.29.2", features = ["v7", "serde"] }
 tower-http = { version = "0.7.1", features = ["trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
-tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "fs", "sync"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal", "fs", "sync", "time"] }
 
 [profile.release]
 opt-level = 3
