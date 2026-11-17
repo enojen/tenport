@@ -1,4 +1,5 @@
 mod accounts;
+mod commands;
 mod events;
 mod health;
 mod openapi;

@@ -29,7 +29,8 @@ what it must do.
   `DbError`, `HttpError`. `anyhow` only in `main.rs`.
 - A trait only when it has two real implementations, such as a clock or the Kubernetes client
   for tests. Everything else is a concrete type.
-- Logs go through `tracing`, never `println!` or `eprintln!`. `RUST_LOG` sets the filter.
+- Logs go through `tracing`, never `println!` or `eprintln!`. `RUST_LOG` sets the filter. The
+  result of a command, such as the JSON of `tenport user add`, is not a log: it goes to stdout.
 - No `unsafe` (the workspace forbids it).
 
 ## Database
@@ -68,8 +69,8 @@ what it must do.
 ## Before a PR
 
 `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` and
-`cargo test --workspace`. CI runs the same: `server.yml` for the server, the Dockerfile's `check`
-stage for the injector and procs. `rust-toolchain.toml` pins Rust to the version of the images.
+`cargo test --workspace`. CI runs the same in the `check` stage of each
+crate's Dockerfile: the server, the injector and procs. `rust-toolchain.toml` pins Rust to the version of the images.
 
 ## Rules
 
