@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "select projects.id as \"id: _\", projects.org_id as \"org: _\", projects.name as \"name: _\",\n                  projects.repo as \"repo: _\"\n           from projects join memberships on memberships.org_id = projects.org_id\n           where memberships.user_id = ?\n           order by projects.name, projects.id",
+  "query": "select projects.id as \"id: _\", projects.org_id as \"org: _\", projects.name as \"name: _\",\n                  projects.repo as \"repo: _\"\n           from projects join memberships on memberships.org_id = projects.org_id\n           where memberships.user_id = ?\n             and (? is null\n                  or (projects.name, projects.id) > (select name, id from projects where id = ?))\n           order by projects.name, projects.id\n           limit ?",
   "describe": {
     "columns": [
       {
@@ -49,7 +49,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 4
     },
     "nullable": [
       false,
@@ -58,5 +58,5 @@
       false
     ]
   },
-  "hash": "ddfc24364e77457f6635b1ea5d1a9e37260b77fa0e688dcf41e025bf3a3444e9"
+  "hash": "79ad784356e21a96dd128cf0eda9f87cfc91fcd61d16d10d36391f149151eff7"
 }

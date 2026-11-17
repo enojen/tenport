@@ -7,7 +7,7 @@ use tenport_server::accounts::{self, GithubLogin, NewUser, Registration, Role, T
 use tenport_server::cluster::FakeCluster;
 use tenport_server::db::{self, Db};
 use tenport_server::events::Actor;
-use tenport_server::http::{AppState, router};
+use tenport_server::http::{AppState, Limiter, Limits, router};
 use tenport_server::name::Name;
 use tenport_server::runs::{RunTemplate, Runs};
 use tokio::net::TcpListener;
@@ -25,6 +25,10 @@ impl TestServer {
     }
 
     pub async fn start_on(cluster: FakeCluster) -> Self {
+        Self::start_with(cluster, Limits::default()).await
+    }
+
+    pub async fn start_with(cluster: FakeCluster, limits: Limits) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let db = db::open(&dir.path().join("tenport.db")).await.unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -34,6 +38,7 @@ impl TestServer {
         let app = router(AppState {
             db: db.clone(),
             runs: Arc::new(runs),
+            limiter: Arc::new(Limiter::new(limits)),
         });
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         Self {

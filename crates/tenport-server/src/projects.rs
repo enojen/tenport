@@ -47,9 +47,14 @@ pub async fn add(db: &Db, user: &UserId, project: NewProject) -> Result<Project,
     Ok(added.into())
 }
 
-pub async fn list_of_user(db: &Db, user: &UserId) -> Result<Vec<Project>, ProjectsError> {
+pub async fn list_of_user(
+    db: &Db,
+    user: &UserId,
+    after: Option<&ProjectId>,
+    limit: i64,
+) -> Result<Vec<Project>, ProjectsError> {
     let mut conn = db.acquire().await?;
-    Ok(store::list_projects_of_user(&mut conn, user).await?)
+    Ok(store::list_projects_of_user(&mut conn, user, after, limit).await?)
 }
 
 pub(crate) async fn apply(

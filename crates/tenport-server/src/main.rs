@@ -6,7 +6,7 @@ use anyhow::Context;
 use tenport_server::cluster::KubeCluster;
 use tenport_server::command::{self, Command, USAGE};
 use tenport_server::config::Config;
-use tenport_server::http::{self, AppState};
+use tenport_server::http::{self, AppState, Limiter, Limits};
 use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::{db, logs};
 use tokio::net::TcpListener;
@@ -64,15 +64,14 @@ async fn serve() -> anyhow::Result<()> {
         .with_context(|| format!("cannot listen on {}", config.listen))?;
     let terminate = signal(SignalKind::terminate()).context("cannot watch SIGTERM")?;
     tracing::info!(address = %config.listen, "listening");
-    axum::serve(
-        listener,
-        http::router(AppState {
-            db,
-            runs: Arc::new(runs),
-        }),
-    )
-    .with_graceful_shutdown(stopped(terminate))
-    .await?;
+    let state = AppState {
+        db,
+        runs: Arc::new(runs),
+        limiter: Arc::new(Limiter::new(Limits::default())),
+    };
+    axum::serve(listener, http::router(state))
+        .with_graceful_shutdown(stopped(terminate))
+        .await?;
     tracing::info!("stopped");
     Ok(())
 }

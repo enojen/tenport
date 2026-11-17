@@ -24,7 +24,12 @@ async fn lists_health_with_both_answers() {
     let api = openapi().await;
     let responses = &api["paths"]["/health"]["get"]["responses"];
     assert!(responses["200"]["content"]["application/json"].is_object());
-    assert!(responses["503"]["content"]["application/problem+json"].is_object());
+    assert_eq!(
+        responses["503"]["$ref"],
+        "#/components/responses/Unavailable"
+    );
+    let unavailable = &api["components"]["responses"]["Unavailable"];
+    assert!(unavailable["content"]["application/problem+json"].is_object());
     assert!(api["components"]["schemas"]["Problem"].is_object());
 }
 

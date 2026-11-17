@@ -9,29 +9,6 @@ use crate::tasks::TaskId;
 
 use super::command::CommandName;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
-#[serde(transparent)]
-#[sqlx(transparent)]
-pub struct RunName(String);
-
-impl RunName {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<JobName> for RunName {
-    fn from(job: JobName) -> Self {
-        Self(job.as_str().to_owned())
-    }
-}
-
-impl std::fmt::Display for RunName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
 macro_rules! dns_label {
     ($name:ident, $error:ident, $message:literal) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
@@ -59,6 +36,18 @@ macro_rules! dns_label {
 
         parsed_text!($name, $error);
     };
+}
+
+dns_label!(
+    RunName,
+    RunNameError,
+    "a run name is lower-case letters, digits and -, as the name of its Job"
+);
+
+impl From<JobName> for RunName {
+    fn from(job: JobName) -> Self {
+        Self(job.as_str().to_owned())
+    }
 }
 
 dns_label!(

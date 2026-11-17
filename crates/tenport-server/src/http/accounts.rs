@@ -1,11 +1,11 @@
-use axum::Json;
 use axum::extract::State;
 use serde::Serialize;
 use utoipa::ToSchema;
 
 use super::AppState;
 use super::auth::CurrentUser;
-use super::error::{HttpError, PROBLEM_JSON, Problem};
+use super::error::{HttpError, TooManyRequests, Unauthorized, Unavailable};
+use super::extract::Json;
 use crate::accounts::{self, Role};
 
 #[derive(Serialize, ToSchema)]
@@ -30,7 +30,9 @@ pub struct MyOrganization {
     security(("bearer" = [])),
     responses(
         (status = OK, description = "The user of the token and their organizations", body = Me),
-        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
     ),
 )]
 pub async fn me(

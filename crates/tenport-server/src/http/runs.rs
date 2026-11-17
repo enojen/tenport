@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
 
-use axum::Json;
 use axum::body::{Body, Bytes};
-use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::extract::{Path, Query, State};
+use axum::extract::{OriginalUri, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use futures::{AsyncBufReadExt, Stream, stream};
@@ -13,11 +11,16 @@ use utoipa::{IntoParams, ToSchema};
 
 use super::AppState;
 use super::auth::CurrentUser;
-use super::error::{HttpError, PROBLEM_JSON, Problem};
+use super::error::{
+    HttpError, NotMember, PROBLEM_JSON, Problem, TooManyRequests, Unauthorized, Unavailable,
+};
+use super::extract::{Json, Path, Query};
+use super::limits::LogStreamPermit;
+use super::page::{Page, PageQuery, Paged};
 use crate::accounts::Email;
 use crate::cluster::LogReader;
 use crate::name::Name;
-use crate::projects::{ProjectId, ProjectsError};
+use crate::projects::ProjectId;
 use crate::runs::{self, Branch, ClassName, Command, RunName, RunPhase, RunsError, ServiceName};
 use crate::tasks::TaskId;
 
@@ -68,17 +71,18 @@ pub struct Run {
     responses(
         (status = CREATED, description = "The Job of the run is created", body = Run),
         (status = BAD_REQUEST, description = "The body is not a valid run: an unknown command, class or service", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
-        (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
+        (status = FORBIDDEN, response = NotMember),
         (status = CONFLICT, description = "A Job of the task still runs (code machine-busy)", body = Problem, content_type = PROBLEM_JSON),
     ),
 )]
 pub async fn start_run(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
-    body: Result<Json<NewRun>, JsonRejection>,
+    Json(body): Json<NewRun>,
 ) -> Result<(StatusCode, Json<Run>), HttpError> {
-    let Json(body) = body?;
     let new = new_run(body)?;
     let start = async move { state.runs.start(&state.db, &user.id, new).await };
     let run = tokio::spawn(start)
@@ -127,26 +131,42 @@ pub struct LogQuery {
     get,
     path = "/runs",
     security(("bearer" = [])),
-    params(TaskRuns),
+    params(TaskRuns, PageQuery),
     responses(
-        (status = OK, description = "The runs of the task, the oldest first", body = Vec<RunState>),
-        (status = BAD_REQUEST, description = "No project or task, or a task that is not a task id", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
-        (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = OK, description = "The runs of the task, the oldest first; a Link header with rel=\"next\" gives the next page", body = Vec<RunState>,
+            headers(("Link" = String, description = "The next page, when there is one"))),
+        (status = BAD_REQUEST, description = "No project or task, an id that is not valid, or a limit out of 1 to 100", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
+        (status = FORBIDDEN, response = NotMember),
     ),
 )]
 pub async fn list_runs(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
-    query: Result<Query<TaskRuns>, QueryRejection>,
-) -> Result<Json<Vec<RunState>>, HttpError> {
-    let Query(query) = query?;
-    let runs = state
+    OriginalUri(uri): OriginalUri,
+    Query(query): Query<TaskRuns>,
+    Query(page): Query<PageQuery>,
+) -> Result<Paged<RunState>, HttpError> {
+    let page = Page::try_from(page)?;
+    let after = page.after.as_deref().map(RunName::parse).transpose();
+    let after = after.map_err(|error| HttpError::BadRequest(format!("after: {error}")))?;
+    let limit = page.rows_to_read();
+    let found = state
         .runs
-        .list_of_task(&state.db, &user.id, &query.project, &query.task)
+        .list_of_task(
+            &state.db,
+            &user.id,
+            &query.project,
+            &query.task,
+            after.as_ref(),
+            limit,
+        )
         .await
         .map_err(run_error)?;
-    Ok(Json(runs.into_iter().map(Into::into).collect()))
+    let runs = found.into_iter().map(RunState::from).collect();
+    Ok(Paged::new(runs, &page, &uri, |run| run.name.clone()))
 }
 
 #[utoipa::path(
@@ -156,8 +176,10 @@ pub async fn list_runs(
     params(("name" = String, Path, description = "The name of the run, the name of its Job")),
     responses(
         (status = OK, description = "The run, with the phase of its Job", body = RunState),
-        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
-        (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
+        (status = FORBIDDEN, response = NotMember),
         (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
     ),
 )]
@@ -184,8 +206,10 @@ pub async fn find_run(
     ),
     responses(
         (status = OK, description = "The log of the box container; with follow=true it stays open until the container ends", body = String, content_type = "text/plain"),
-        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
-        (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
+        (status = FORBIDDEN, response = NotMember),
         (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
         (status = CONFLICT, description = "The box container has not started (code box-not-started; ask again after Retry-After seconds), or the Job is gone (code job-gone)", body = Problem, content_type = PROBLEM_JSON,
             headers(("Retry-After" = u32, description = "Seconds to wait before asking again; only with box-not-started"))),
@@ -195,16 +219,16 @@ pub async fn read_log(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path(name): Path<RunName>,
-    query: Result<Query<LogQuery>, QueryRejection>,
+    Query(query): Query<LogQuery>,
 ) -> Result<Response, HttpError> {
-    let Query(query) = query?;
+    let permit = state.limiter.open_log_stream(&user.id)?;
     let reader = state
         .runs
         .open_log(&state.db, &user.id, &name, query.follow)
         .await
         .map_err(run_error)?;
     let headers = [(header::CONTENT_TYPE, TEXT_PLAIN)];
-    Ok((headers, Body::from_stream(log_chunks(reader))).into_response())
+    Ok((headers, Body::from_stream(log_chunks(reader, permit))).into_response())
 }
 
 #[utoipa::path(
@@ -214,8 +238,10 @@ pub async fn read_log(
     params(("name" = String, Path, description = "The name of the run, the name of its Job")),
     responses(
         (status = NO_CONTENT, description = "The run is stopped: its Job and pod are deleted, or were gone"),
-        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
-        (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
+        (status = FORBIDDEN, response = NotMember),
         (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
     ),
 )]
@@ -234,19 +260,20 @@ pub async fn stop_run(
 
 const TEXT_PLAIN: &str = "text/plain; charset=utf-8";
 
-fn log_chunks(reader: LogReader) -> impl Stream<Item = std::io::Result<Bytes>> {
-    stream::try_unfold(reader, |mut reader| async move {
+fn log_chunks(
+    reader: LogReader,
+    permit: LogStreamPermit,
+) -> impl Stream<Item = std::io::Result<Bytes>> {
+    stream::try_unfold((reader, permit), |(mut reader, permit)| async move {
         let chunk = Bytes::copy_from_slice(reader.fill_buf().await?);
         reader.as_mut().consume(chunk.len());
-        Ok((!chunk.is_empty()).then_some((chunk, reader)))
+        Ok((!chunk.is_empty()).then_some((chunk, (reader, permit))))
     })
 }
 
 fn run_error(error: RunsError) -> HttpError {
     match error {
-        RunsError::Projects(ProjectsError::NotMember { .. }) => {
-            HttpError::Forbidden(error.to_string())
-        }
+        RunsError::Projects(error) => error.into(),
         RunsError::NotFound { .. } => HttpError::NotFound(error.to_string()),
         RunsError::NotStarted { .. } => HttpError::BoxNotStarted(error.to_string()),
         RunsError::JobGone { .. } => HttpError::JobGone(error.to_string()),
@@ -291,9 +318,7 @@ fn new_run(body: NewRun) -> Result<runs::NewRun, HttpError> {
 
 fn start_error(error: RunsError) -> HttpError {
     match error {
-        RunsError::Projects(ProjectsError::NotMember { .. }) => {
-            HttpError::Forbidden(error.to_string())
-        }
+        RunsError::Projects(error) => error.into(),
         RunsError::Busy { .. } => HttpError::MachineBusy(error.to_string()),
         RunsError::Template(
             runs::TemplateError::NoClass { .. } | runs::TemplateError::NoService { .. },

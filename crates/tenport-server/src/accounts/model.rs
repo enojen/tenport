@@ -11,9 +11,9 @@ const TOKEN_PREFIX: &str = "tbx_";
 const TOKEN_BYTES: usize = 32;
 const GITHUB_LOGIN_MAX: usize = 39;
 
-short_id!(OrgId, "o-");
-short_id!(UserId, "u-");
-short_id!(TokenId, "t-");
+short_id!(OrgId, "o-", "an organization id");
+short_id!(UserId, "u-", "a user id");
+short_id!(TokenId, "t-", "a token id");
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[serde(try_from = "String", into = "String")]

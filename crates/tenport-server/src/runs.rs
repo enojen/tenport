@@ -28,8 +28,8 @@ use crate::tasks::TaskId;
 
 pub use command::{Command, CommandError, CommandName, command_rules};
 pub use model::{
-    Branch, BranchError, ClassName, ClassNameError, Run, RunName, RunPhase, RunStarted, RunState,
-    RunsEvent, ServiceName, ServiceNameError,
+    Branch, BranchError, ClassName, ClassNameError, Run, RunName, RunNameError, RunPhase,
+    RunStarted, RunState, RunsEvent, ServiceName, ServiceNameError,
 };
 pub use template::{RunTemplate, TemplateError};
 
@@ -147,10 +147,12 @@ impl Runs {
         user: &UserId,
         project: &ProjectId,
         task: &TaskId,
+        after: Option<&RunName>,
+        limit: i64,
     ) -> Result<Vec<RunState>, RunsError> {
         projects::require_member(db, user, project).await?;
         let (runs, jobs) = try_join!(
-            list_runs_of_task(db, project, task),
+            list_runs_of_task(db, project, task, after, limit),
             self.list_jobs_of_task(project, task)
         )?;
         let states = runs.into_iter().map(|run| {
@@ -301,8 +303,11 @@ async fn list_runs_of_task(
     db: &Db,
     project: &ProjectId,
     task: &TaskId,
+    after: Option<&RunName>,
+    limit: i64,
 ) -> Result<Vec<Run>, RunsError> {
-    Ok(store::list_runs_of_task(&mut *db.acquire().await?, project, task).await?)
+    let mut conn = db.acquire().await?;
+    Ok(store::list_runs_of_task(&mut conn, project, task, after, limit).await?)
 }
 
 fn find_job_in<'a>(jobs: &'a [JobState], run: &Run) -> Option<&'a JobState> {

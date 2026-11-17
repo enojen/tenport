@@ -1,23 +1,40 @@
 use std::error::Error as StdError;
 
 use axum::Json;
-use axum::extract::rejection::{JsonRejection, QueryRejection};
+use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
-use utoipa::ToSchema;
+use utoipa::openapi::header::Header;
+use utoipa::openapi::schema::{ObjectBuilder, Type};
+use utoipa::openapi::{self, Content, Ref, RefOr, ResponseBuilder};
+use utoipa::{ToResponse, ToSchema};
+
+use crate::projects::ProjectsError;
 
 #[cfg(test)]
 mod tests;
 
 pub const PROBLEM_JSON: &str = "application/problem+json";
 const BLANK_TYPE: &str = "about:blank";
-const BOX_START_RETRY_SECONDS: &str = "5";
+const BOX_START_RETRY_SECONDS: u64 = 5;
+const LOG_STREAM_RETRY_SECONDS: u64 = 5;
+const QUERY_PREFIX: &str = "Failed to deserialize query string: ";
 
 #[derive(Debug, thiserror::Error)]
 pub enum HttpError {
     #[error("no route for {method} {path}")]
     NoRoute { method: Method, path: String },
+    #[error("{path} has no method {method}")]
+    MethodNotAllowed { method: Method, path: String },
+    #[error("{0}")]
+    PayloadTooLarge(String),
+    #[error("too many requests; ask again after {retry_after} seconds")]
+    TooManyRequests { retry_after: u64 },
+    #[error("the user has {limit} followed logs open, the most there may be; close one first")]
+    TooManyLogStreams { limit: usize },
+    #[error("the request did not end in {seconds} seconds")]
+    Timeout { seconds: u64 },
     #[error("the database does not answer")]
     DatabaseDown(#[source] sqlx::Error),
     #[error("{0}")]
@@ -48,7 +65,12 @@ impl HttpError {
     fn status(&self) -> StatusCode {
         match self {
             Self::NoRoute { .. } | Self::NotFound(_) => StatusCode::NOT_FOUND,
-            Self::DatabaseDown(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::MethodNotAllowed { .. } => StatusCode::METHOD_NOT_ALLOWED,
+            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::TooManyRequests { .. } | Self::TooManyLogStreams { .. } => {
+                StatusCode::TOO_MANY_REQUESTS
+            }
+            Self::DatabaseDown(_) | Self::Timeout { .. } => StatusCode::SERVICE_UNAVAILABLE,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
@@ -60,9 +82,11 @@ impl HttpError {
         }
     }
 
-    fn retry_after(&self) -> Option<&'static str> {
+    fn retry_after(&self) -> Option<u64> {
         match self {
             Self::BoxNotStarted(_) => Some(BOX_START_RETRY_SECONDS),
+            Self::TooManyRequests { retry_after } => Some(*retry_after),
+            Self::TooManyLogStreams { .. } => Some(LOG_STREAM_RETRY_SECONDS),
             _ => None,
         }
     }
@@ -70,6 +94,11 @@ impl HttpError {
     fn code(&self) -> &'static str {
         match self {
             Self::NoRoute { .. } | Self::NotFound(_) => "not-found",
+            Self::MethodNotAllowed { .. } => "method-not-allowed",
+            Self::PayloadTooLarge(_) => "payload-too-large",
+            Self::TooManyRequests { .. } => "too-many-requests",
+            Self::TooManyLogStreams { .. } => "too-many-log-streams",
+            Self::Timeout { .. } => "timeout",
             Self::DatabaseDown(_) => "database-down",
             Self::BadRequest(_) => "bad-request",
             Self::Unauthorized => "unauthorized",
@@ -85,12 +114,33 @@ impl HttpError {
 
 impl From<QueryRejection> for HttpError {
     fn from(rejection: QueryRejection) -> Self {
+        let text = rejection.body_text();
+        Self::BadRequest(text.strip_prefix(QUERY_PREFIX).unwrap_or(&text).to_owned())
+    }
+}
+
+impl From<PathRejection> for HttpError {
+    fn from(rejection: PathRejection) -> Self {
         Self::BadRequest(rejection.body_text())
+    }
+}
+
+impl From<ProjectsError> for HttpError {
+    fn from(error: ProjectsError) -> Self {
+        match error {
+            ProjectsError::NotAdmin { .. } | ProjectsError::NotMember { .. } => {
+                Self::Forbidden(error.to_string())
+            }
+            other => Self::internal(other),
+        }
     }
 }
 
 impl From<JsonRejection> for HttpError {
     fn from(rejection: JsonRejection) -> Self {
+        if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            return Self::PayloadTooLarge(rejection.body_text());
+        }
         let detail = match (&rejection, serde_error(&rejection)) {
             (JsonRejection::JsonSyntaxError(_), Some(error)) => {
                 format!("the body is not valid JSON: {}", describe(error))
@@ -161,8 +211,62 @@ impl IntoResponse for HttpError {
         if let Some(seconds) = retry_after {
             response
                 .headers_mut()
-                .insert(header::RETRY_AFTER, HeaderValue::from_static(seconds));
+                .insert(header::RETRY_AFTER, HeaderValue::from(seconds));
         }
         response
     }
+}
+
+pub struct Unauthorized;
+
+pub struct NotMember;
+
+pub struct TooManyRequests;
+
+pub struct Unavailable;
+
+impl<'s> ToResponse<'s> for Unauthorized {
+    fn response() -> (&'s str, RefOr<openapi::Response>) {
+        let response = problem_response("No token, or a token Tenport does not know");
+        ("Unauthorized", response.build().into())
+    }
+}
+
+impl<'s> ToResponse<'s> for NotMember {
+    fn response() -> (&'s str, RefOr<openapi::Response>) {
+        let response = problem_response("The user is not a member of the project's organization");
+        ("NotMember", response.build().into())
+    }
+}
+
+impl<'s> ToResponse<'s> for TooManyRequests {
+    fn response() -> (&'s str, RefOr<openapi::Response>) {
+        let retry_after = Header::builder()
+            .schema(Some(
+                ObjectBuilder::new()
+                    .schema_type(Type::Integer)
+                    .minimum(Some(1)),
+            ))
+            .description(Some("Seconds to wait before asking again"))
+            .build();
+        let response = problem_response(TOO_MANY_REQUESTS_TEXT).header("Retry-After", retry_after);
+        ("TooManyRequests", response.build().into())
+    }
+}
+
+impl<'s> ToResponse<'s> for Unavailable {
+    fn response() -> (&'s str, RefOr<openapi::Response>) {
+        let response = problem_response(UNAVAILABLE_TEXT);
+        ("Unavailable", response.build().into())
+    }
+}
+
+const TOO_MANY_REQUESTS_TEXT: &str = "Over a limit of the user: requests per second (code too-many-requests), or followed logs open at one time (code too-many-log-streams); ask again after Retry-After seconds";
+const UNAVAILABLE_TEXT: &str = "The request did not end in time (code timeout), or the database does not answer (code database-down)";
+
+fn problem_response(description: &str) -> ResponseBuilder {
+    let problem = Content::new(Some(Ref::from_schema_name("Problem")));
+    ResponseBuilder::new()
+        .description(description)
+        .content(PROBLEM_JSON, problem)
 }
