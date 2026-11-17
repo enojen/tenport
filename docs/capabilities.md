@@ -275,7 +275,7 @@ What the tenbox server and the CLI do, and where Tenport is:
 | Nodes, every 30 seconds: a worker that comes or goes, with its Hetzner type and hourly price | Step 8 |
 | Task volumes: their price, the deletion after the grace period and the ntfy notice | Not moved: no task volumes |
 | `GET /costs?from&to`, the `costs` command and `GET /metrics` | Step 9 |
-| `user add` command: a new user; the token shows once, in its output | Step 2 |
+| `user add` command: a new user; the token shows once, in its output | Done as `tenport user add` |
 | `backup --to <file>` command: a copy of the database. A CronJob runs it each day at 03:00 and keeps 7 days | Step 10 |
 | `GET /docs`: the Swagger page | Step 10 |
 
@@ -284,8 +284,9 @@ The steps, in order:
 1. `POST /events`, and the CLI sends its events to it. Done.
 2. Tenport in the cluster, next to the tenbox server: its image, its ServiceAccount and Role,
    and a Tailscale node, in tenyard's manifests. It answers `/health` on the tailnet. The
-   `user add` command comes here, so the first admin can be made in the pod.
-3. Tenport starts the Jobs: `POST /runs` to start one, its state and log, stop, and delete a
+   `user add` command comes here, so the first admin can be made in the pod. Done (2026-11-17):
+   tenport #18 and tenyard #122; the first admin is made.
+3. Next. Tenport starts the Jobs: `POST /runs` to start one, its state and log, stop, and delete a
    task. The template comes from the ConfigMap.
 4. What a run needs comes from Tenport: the project Secrets, the presigned links of the bucket
    archive (the bucket keys in Tenport's env), the GitHub App token, the placeholder Secret and
