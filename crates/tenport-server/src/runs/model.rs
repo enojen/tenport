@@ -139,7 +139,7 @@ pub struct RunStarted {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoredRun {
+pub struct Run {
     pub name: RunName,
     pub project: ProjectId,
     pub task: TaskId,
@@ -168,7 +168,7 @@ impl From<JobPhase> for RunPhase {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunState {
-    pub run: StoredRun,
+    pub run: Run,
     pub phase: RunPhase,
     pub reason: Option<String>,
 }
