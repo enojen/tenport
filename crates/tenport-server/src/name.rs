@@ -6,7 +6,7 @@ mod tests;
 const MAX_LENGTH: usize = 200;
 
 macro_rules! parsed_text {
-    ($name:ident, $error:ident) => {
+    ($name:ident, $error:ty) => {
         impl TryFrom<String> for $name {
             type Error = $error;
 

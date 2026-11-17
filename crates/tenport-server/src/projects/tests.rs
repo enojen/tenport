@@ -17,7 +17,10 @@ async fn an_admin_adds_a_project_and_sees_it() {
     let added = add(&db, &admin.user, new_project(&admin.org, "Tenport"))
         .await
         .unwrap();
-    assert_eq!(list_of_user(&db, &admin.user).await.unwrap(), vec![added]);
+    assert_eq!(
+        list_of_user(&db, &admin.user, None, 50).await.unwrap(),
+        vec![added]
+    );
 }
 
 #[tokio::test]
@@ -32,7 +35,12 @@ async fn a_member_cannot_add_a_project() {
         matches!(&error, ProjectsError::NotAdmin { org } if *org == admin.org),
         "{error}"
     );
-    assert!(list_of_user(&db, &admin.user).await.unwrap().is_empty());
+    assert!(
+        list_of_user(&db, &admin.user, None, 50)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -46,7 +54,10 @@ async fn a_user_sees_only_the_projects_of_their_organizations() {
     let theirs = add(&db, &other.user, new_project(&other.org, "Shop"))
         .await
         .unwrap();
-    assert_eq!(list_of_user(&db, &other.user).await.unwrap(), vec![theirs]);
+    assert_eq!(
+        list_of_user(&db, &other.user, None, 50).await.unwrap(),
+        vec![theirs]
+    );
 }
 
 #[test]

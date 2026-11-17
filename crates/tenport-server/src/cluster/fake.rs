@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
+use std::pin::Pin;
 use std::sync::Mutex;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use futures::FutureExt;
 use futures::future::{BoxFuture, ready};
-use futures::io::Cursor;
+use futures::io::{AsyncRead, AsyncReadExt, BufReader, Cursor};
 use k8s_openapi::api::batch::v1::Job;
 use time::OffsetDateTime;
 
@@ -101,17 +103,18 @@ impl FakeCluster {
             .map(|pod| pod.state.clone())
     }
 
-    fn open_log(&self, pod: &PodName) -> Result<LogReader, ClusterError> {
+    fn open_log(&self, pod: &PodName, read: LogRead) -> Result<LogReader, ClusterError> {
         let jobs = self.lock();
-        let found = jobs
-            .values()
-            .filter_map(|fake| fake.pod.as_ref())
-            .find(|fake| fake.state.name == *pod);
-        let log = found
-            .ok_or_else(|| ClusterError::NoPod(pod.clone()))?
-            .log
-            .clone();
-        Ok(Box::pin(Cursor::new(log.into_bytes())))
+        let found = jobs.values().find_map(|fake| {
+            let found = fake.pod.as_ref().filter(|found| found.state.name == *pod)?;
+            Some((fake.phase, found.log.clone()))
+        });
+        let (phase, log) = found.ok_or_else(|| ClusterError::NoPod(pod.clone()))?;
+        let written = Cursor::new(log.into_bytes());
+        if read.follow && phase == JobPhase::Running {
+            return Ok(Box::pin(BufReader::new(written.chain(StillRunning))));
+        }
+        Ok(Box::pin(written))
     }
 
     fn delete(&self, job: &JobName) -> bool {
@@ -145,13 +148,25 @@ impl Cluster for FakeCluster {
     fn read_log<'a>(
         &'a self,
         pod: &'a PodName,
-        _read: LogRead,
+        read: LogRead,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>> {
-        ready(self.open_log(pod)).boxed()
+        ready(self.open_log(pod, read)).boxed()
     }
 
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {
         ready(Ok(self.delete(job))).boxed()
+    }
+}
+
+struct StillRunning;
+
+impl AsyncRead for StillRunning {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        _context: &mut Context<'_>,
+        _buffer: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Poll::Pending
     }
 }
 

@@ -4,7 +4,7 @@ use crate::accounts::OrgId;
 use crate::id::short_id;
 use crate::name::{Name, parsed_text};
 
-short_id!(ProjectId, "");
+short_id!(ProjectId, "", "a project id");
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[serde(try_from = "String", into = "String")]

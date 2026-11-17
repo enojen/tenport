@@ -46,14 +46,24 @@ pub async fn list_runs_of_task(
     conn: &mut SqliteConnection,
     project: &ProjectId,
     task: &TaskId,
+    after: Option<&RunName>,
+    limit: i64,
 ) -> Result<Vec<Run>, sqlx::Error> {
     sqlx::query_as!(
         Run,
         r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
                   command as "command: _", class as "class: _", created_at as "created: _"
-           from runs where project_id = ? and task_id = ? order by created_at, name"#,
+           from runs
+           where project_id = ? and task_id = ?
+             and (? is null
+                  or (created_at, name) > (select created_at, name from runs where name = ?))
+           order by created_at, name
+           limit ?"#,
         project,
         task,
+        after,
+        after,
+        limit,
     )
     .fetch_all(conn)
     .await

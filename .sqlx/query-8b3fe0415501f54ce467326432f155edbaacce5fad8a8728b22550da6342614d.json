@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", created_at as \"created: _\"\n           from runs where project_id = ? and task_id = ? order by created_at, name",
+  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", created_at as \"created: _\"\n           from runs\n           where project_id = ? and task_id = ?\n             and (? is null\n                  or (created_at, name) > (select created_at, name from runs where name = ?))\n           order by created_at, name\n           limit ?",
   "describe": {
     "columns": [
       {
@@ -71,7 +71,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 5
     },
     "nullable": [
       false,
@@ -82,5 +82,5 @@
       false
     ]
   },
-  "hash": "15f8c7163c19ca08db269a4d2f24e76aad523cbfd7dae056d0a602d65d8a7d4d"
+  "hash": "8b3fe0415501f54ce467326432f155edbaacce5fad8a8728b22550da6342614d"
 }

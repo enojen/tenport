@@ -2,6 +2,7 @@ mod accounts;
 mod commands;
 mod events;
 mod health;
+mod http;
 mod openapi;
 mod projects;
 mod runs;

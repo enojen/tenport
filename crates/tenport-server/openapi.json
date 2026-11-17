@@ -1,5 +1,56 @@
 {
   "components": {
+    "responses": {
+      "NotMember": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "The user is not a member of the project's organization"
+      },
+      "TooManyRequests": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "Over a limit of the user: requests per second (code too-many-requests), or followed logs open at one time (code too-many-log-streams); ask again after Retry-After seconds",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds to wait before asking again",
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "No token, or a token Tenport does not know"
+      },
+      "Unavailable": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "The request did not end in time (code timeout), or the database does not answer (code database-down)"
+      }
+    },
     "schemas": {
       "Author": {
         "properties": {
@@ -519,7 +570,7 @@
     }
   },
   "info": {
-    "description": "The backend of Tenyard",
+    "description": "The backend of Tenyard. Limits: 10 requests per second for each user, 20 at once (429, code too-many-requests); 5 followed logs open for each user (429, code too-many-log-streams); 30 seconds for a request to answer (503, code timeout); 2 MB for a body (413). A 429 has Retry-After: ask again after that many seconds. A list gives 50 items, up to 100 with limit, and a Link header with rel=\"next\" for the next page.",
     "license": {
       "name": "FSL-1.1-ALv2"
     },
@@ -566,24 +617,10 @@
             "description": "The body is not a list of valid events"
           },
           "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Tenport does not know"
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The user is not a member of a project's organization"
+            "$ref": "#/components/responses/NotMember"
           },
           "409": {
             "content": {
@@ -594,6 +631,12 @@
               }
             },
             "description": "An id came before with other content, or an event does not fit the state; nothing is stored"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "security": [
@@ -618,14 +661,7 @@
             "description": "The database answers"
           },
           "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The database does not answer"
+            "$ref": "#/components/responses/Unavailable"
           }
         }
       }
@@ -645,14 +681,13 @@
             "description": "The user of the token and their organizations"
           },
           "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Tenport does not know"
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "security": [
@@ -665,6 +700,28 @@
     "/projects": {
       "get": {
         "operationId": "list_projects",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -677,9 +734,17 @@
                 }
               }
             },
-            "description": "The projects of the user's organizations"
+            "description": "The projects of the user's organizations, by name; a Link header with rel=\"next\" gives the next page",
+            "headers": {
+              "Link": {
+                "description": "The next page, when there is one",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
-          "401": {
+          "400": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -687,7 +752,16 @@
                 }
               }
             },
-            "description": "No token, or a token Tenport does not know"
+            "description": "A limit out of 1 to 100, or an after that is not a project id"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "security": [
@@ -730,14 +804,7 @@
             "description": "The body is not a valid new project"
           },
           "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Tenport does not know"
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "content": {
@@ -748,6 +815,12 @@
               }
             },
             "description": "The user is not an admin of the organization"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "security": [
@@ -777,6 +850,26 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -791,7 +884,15 @@
                 }
               }
             },
-            "description": "The runs of the task, the oldest first"
+            "description": "The runs of the task, the oldest first; a Link header with rel=\"next\" gives the next page",
+            "headers": {
+              "Link": {
+                "description": "The next page, when there is one",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "content": {
@@ -801,27 +902,19 @@
                 }
               }
             },
-            "description": "No project or task, or a task that is not a task id"
+            "description": "No project or task, an id that is not valid, or a limit out of 1 to 100"
           },
           "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Tenport does not know"
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The user is not a member of the project's organization"
+            "$ref": "#/components/responses/NotMember"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "security": [
@@ -865,24 +958,10 @@
             "description": "The body is not a valid run: an unknown command, class or service"
           },
           "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Tenport does not know"
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The user is not a member of the project's organization"
+            "$ref": "#/components/responses/NotMember"
           },
           "409": {
             "content": {
@@ -893,6 +972,12 @@
               }
             },
             "description": "A Job of the task still runs (code machine-busy)"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "security": [
@@ -921,24 +1006,10 @@
             "description": "The run is stopped: its Job and pod are deleted, or were gone"
           },
           "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Tenport does not know"
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The user is not a member of the project's organization"
+            "$ref": "#/components/responses/NotMember"
           },
           "404": {
             "content": {
@@ -949,6 +1020,12 @@
               }
             },
             "description": "Tenport does not know the run"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "security": [
@@ -982,24 +1059,10 @@
             "description": "The run, with the phase of its Job"
           },
           "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Tenport does not know"
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The user is not a member of the project's organization"
+            "$ref": "#/components/responses/NotMember"
           },
           "404": {
             "content": {
@@ -1010,6 +1073,12 @@
               }
             },
             "description": "Tenport does not know the run"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "security": [
@@ -1053,24 +1122,10 @@
             "description": "The log of the box container; with follow=true it stays open until the container ends"
           },
           "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No token, or a token Tenport does not know"
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The user is not a member of the project's organization"
+            "$ref": "#/components/responses/NotMember"
           },
           "404": {
             "content": {
@@ -1101,6 +1156,12 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
           }
         },
         "security": [

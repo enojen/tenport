@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use axum::extract::FromRequestParts;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
@@ -19,6 +21,7 @@ impl FromRequestParts<AppState> for CurrentUser {
             .await
             .map_err(HttpError::internal)?
             .ok_or(HttpError::Unauthorized)?;
+        state.limiter.take_request(&user.id, Instant::now())?;
         Ok(Self(user))
     }
 }

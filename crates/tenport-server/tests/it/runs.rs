@@ -9,7 +9,7 @@ use crate::server::TestServer;
 
 const CREATE_TIME: Duration = Duration::from_millis(300);
 
-async fn project_of(server: &TestServer, token: &Token) -> String {
+pub async fn project_of(server: &TestServer, token: &Token) -> String {
     let me: Value = reqwest::Client::new()
         .get(server.url("/me"))
         .bearer_auth(token.expose())
@@ -33,7 +33,7 @@ async fn project_of(server: &TestServer, token: &Token) -> String {
     project["id"].as_str().unwrap().to_owned()
 }
 
-fn build(project: &str) -> Value {
+pub fn build(project: &str) -> Value {
     json!({
         "project": project,
         "task": "TEN-301",
@@ -47,7 +47,7 @@ fn build(project: &str) -> Value {
     })
 }
 
-async fn post_run(server: &TestServer, token: &Token, body: &Value) -> reqwest::Response {
+pub async fn post_run(server: &TestServer, token: &Token, body: &Value) -> reqwest::Response {
     reqwest::Client::new()
         .post(server.url("/runs"))
         .bearer_auth(token.expose())
@@ -119,7 +119,7 @@ async fn a_user_of_another_organization_is_forbidden() {
     assert!(server.cluster.jobs().is_empty());
 }
 
-async fn started_run(server: &TestServer, token: &Token) -> (String, String) {
+pub async fn started_run(server: &TestServer, token: &Token) -> (String, String) {
     let project = project_of(server, token).await;
     let run: Value = post_run(server, token, &build(&project))
         .await
@@ -129,7 +129,7 @@ async fn started_run(server: &TestServer, token: &Token) -> (String, String) {
     (project, run["name"].as_str().unwrap().to_owned())
 }
 
-async fn get(server: &TestServer, token: &Token, path: &str) -> reqwest::Response {
+pub async fn get(server: &TestServer, token: &Token, path: &str) -> reqwest::Response {
     reqwest::Client::new()
         .get(server.url(path))
         .bearer_auth(token.expose())
@@ -278,6 +278,7 @@ async fn the_log_of_a_run_is_the_plain_text_of_its_box_container() {
     let (_, name) = started_run(&server, &token).await;
     let (job, pod, log) = started_pod("cloning\nbuilding\n", &name);
     server.cluster.set_pod(&job, pod, &log);
+    server.cluster.set_phase(&job, JobPhase::Succeeded);
     let response = get(&server, &token, &format!("/runs/{name}/log?follow=true")).await;
     assert_eq!(response.status(), StatusCode::OK);
     let content_type = response.headers()["content-type"].to_str().unwrap();

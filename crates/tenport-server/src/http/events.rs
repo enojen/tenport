@@ -1,15 +1,15 @@
-use axum::Json;
 use axum::extract::State;
-use axum::extract::rejection::JsonRejection;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 
 use super::AppState;
 use super::auth::CurrentUser;
-use super::error::{HttpError, PROBLEM_JSON, Problem};
+use super::error::{
+    HttpError, NotMember, PROBLEM_JSON, Problem, TooManyRequests, Unauthorized, Unavailable,
+};
+use super::extract::Json;
 use crate::events::{EventId, EventsError};
-use crate::projects::ProjectsError;
 use crate::tasks::{self, Reported, TasksError, TasksEvent};
 
 #[derive(Deserialize, ToSchema)]
@@ -37,17 +37,18 @@ pub struct Recorded {
     responses(
         (status = OK, description = "The new events are stored; an id Tenport has is skipped", body = Recorded),
         (status = BAD_REQUEST, description = "The body is not a list of valid events", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
-        (status = FORBIDDEN, description = "The user is not a member of a project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
+        (status = FORBIDDEN, response = NotMember),
         (status = CONFLICT, description = "An id came before with other content, or an event does not fit the state; nothing is stored", body = Problem, content_type = PROBLEM_JSON),
     ),
 )]
 pub async fn record_events(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
-    body: Result<Json<Vec<ReportedEvent>>, JsonRejection>,
+    Json(body): Json<Vec<ReportedEvent>>,
 ) -> Result<Json<Recorded>, HttpError> {
-    let Json(body) = body?;
     let reported = body
         .into_iter()
         .map(|event| Reported {
@@ -67,9 +68,7 @@ pub async fn record_events(
 
 fn record_error(error: TasksError) -> HttpError {
     match error {
-        TasksError::Projects(ProjectsError::NotMember { .. }) => {
-            HttpError::Forbidden(error.to_string())
-        }
+        TasksError::Projects(error) => error.into(),
         TasksError::Events(EventsError::Conflict { .. } | EventsError::Refused { .. }) => {
             HttpError::Conflict(error.to_string())
         }

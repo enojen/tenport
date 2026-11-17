@@ -316,7 +316,11 @@ The steps, in order:
    `POST /run-credentials`. Deleting a task, which deletes its bucket archive (the CLI's
    `machine rm`).
 5. The runs: `run.finished`, so `GET /runs?project=<id>&task=<id>` and `GET /runs/{name}` keep
-   the phase after the Job is deleted.
+   the phase after the Job is deleted. `run.finished` also keeps the JSON result of the tenbox
+   command (the last JSON line of the box log) as `output`, and `GET /runs/{name}` gives it. An
+   agent waits for a run with `GET /runs/{name}` until `phase` is not `Running`, and reads
+   `phase`, `reason` and `output` there: it never reads a log. A followed log is for a person,
+   in a terminal or in the panel.
 6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/rm/ls` go to
    Tenport. The kubeconfig and the bucket key file leave the computer.
    - To decide here: a client that only follows `Retry-After` asks forever when the box

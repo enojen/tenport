@@ -27,6 +27,8 @@ pub async fn insert_project(
 pub async fn list_projects_of_user(
     conn: &mut SqliteConnection,
     user: &UserId,
+    after: Option<&ProjectId>,
+    limit: i64,
 ) -> Result<Vec<Project>, sqlx::Error> {
     sqlx::query_as!(
         Project,
@@ -34,8 +36,14 @@ pub async fn list_projects_of_user(
                   projects.repo as "repo: _"
            from projects join memberships on memberships.org_id = projects.org_id
            where memberships.user_id = ?
-           order by projects.name, projects.id"#,
+             and (? is null
+                  or (projects.name, projects.id) > (select name, id from projects where id = ?))
+           order by projects.name, projects.id
+           limit ?"#,
         user,
+        after,
+        after,
+        limit,
     )
     .fetch_all(conn)
     .await
