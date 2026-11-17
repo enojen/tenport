@@ -115,7 +115,7 @@ pub enum ProjectSecret {
 }
 
 impl ProjectSecret {
-    pub fn key(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::TrackerApiKey => "tracker_api_key",
             Self::NtfyUrl => "ntfy_url",
@@ -125,7 +125,7 @@ impl ProjectSecret {
 
 impl fmt::Display for ProjectSecret {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.key())
+        f.write_str(self.name())
     }
 }
 

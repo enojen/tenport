@@ -228,14 +228,14 @@ Rules from the panel's RAM measurements (2026-11-15). Low browser RAM is the use
 - The plan, build and close workflows and the skills: they stay with the agents. They write their
   state to Tenport instead of to local files.
 - The cluster's manifests and its own Secrets: they stay in the `tenyard` repository. The
-  project Secrets are the exception: Tenport writes them (section 9).
+  Secrets `project-<project id>` are the exception: Tenport writes them (section 9).
 
 ## 9. The move from the tenbox server
 
 Tenport takes over every job of the tenbox server, and every talk with the cluster, one PR at a
 time. In the end only Tenport talks to Kubernetes: the CLI on a computer and the agent in a box
 send their requests to Tenport, and a computer keeps only `TENPORT_URL` and `TENPORT_TOKEN`; no
-kubeconfig, no bucket keys, no project Secrets. Then `server/` and the CLI's Kubernetes code are
+kubeconfig, no bucket keys, no project secrets. Then `server/` and the CLI's Kubernetes code are
 deleted from tenbox. The live server runs the image of tenbox commit `71dbd66`; no commit after it
 changes the server.
 
@@ -246,7 +246,7 @@ Decided (2026-11-17):
   `tenbox` namespace only.
 - Tenport talks to the cluster with the `kube` crate, behind one trait with a fake for tests.
   It lists the cluster on a timer and turns each change into an event; no watch streams.
-- A project Secret (the tracker key, the ntfy URL) goes from the admin's CLI to Tenport, and
+- A project secret (the tracker key, the ntfy URL) goes from the admin's CLI to Tenport, and
   Tenport writes it to the Secret `project-<project id>`. Tenport keeps no copy: not in its
   database, not in a log. The API only writes a Secret and never gives it back; it tells only
   that it is there and when it changed. Only an organization admin may write one. k3s has
@@ -268,7 +268,7 @@ What the tenbox server and the CLI do, and where Tenport is:
 | `project add` command: a repository joins an organization as a project | Done as `POST /projects` and `GET /projects` |
 | `POST /events`: takes the task events; an id that comes twice is stored once | Done; the CLI sends `task.started` and `task.closed` |
 | The CLI starts, follows, stops and deletes the Jobs with a kubeconfig | Steps 3 and 6 |
-| The CLI writes the project Secret before each Job | Step 4: `PUT /projects/{project}/secrets/{name}`; the CLI stops in step 6 |
+| The CLI writes the Secret `project-<project id>` before each Job | Step 4: `PUT /projects/{project}/secrets/{name}`; the CLI stops in step 6 |
 | The CLI makes the presigned links of the bucket archive, with the bucket keys on the computer | Step 4 |
 | `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Step 4 |
 | A placeholder Secret for each new Job | Step 4 |
@@ -311,11 +311,11 @@ The steps, in order:
    - Deleting a task moves to step 4: with no task volumes, a task has only its bucket archive
      to delete, and that needs the bucket keys of step 4.
 4. Now; k3s has `secrets-encryption` (tenyard #127). What a run needs comes from Tenport: the
-   project Secrets, the presigned links of the bucket archive (the bucket keys in Tenport's
+   project secrets, the presigned links of the bucket archive (the bucket keys in Tenport's
    env), the GitHub App token, the placeholder Secret and `POST /run-credentials`. Deleting a
    task, which deletes its bucket archive (the CLI's `machine rm`). One PR for each, in this
    order.
-   - The project Secrets: `PUT /projects/{project}/secrets/{name}` with `{"value": ...}`,
+   - The project secrets: `PUT /projects/{project}/secrets/{name}` with `{"value": ...}`,
      `DELETE /projects/{project}/secrets/{name}`, and `GET /projects/{project}/secrets`, which
      gives each `name` and when it `changed`, never a value. A name is `tracker_api_key` or
      `ntfy_url`, the keys the Job template reads. Their events are `project.secret_changed` and
