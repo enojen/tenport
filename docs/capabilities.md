@@ -252,7 +252,8 @@ Decided (2026-11-17):
   that it is there and when it changed. Only an organization admin may write one. k3s gets
   `secrets-encryption`, so the Secrets are encrypted on disk.
 - While both servers run, Tenport's Jobs have their own label and their template sends the
-  injector to Tenport, so the tenbox server never touches them.
+  injector to Tenport, so the tenbox server never touches them. Every box pod has the label
+  `box: "true"`, and Tetragon and the process metrics select it, so they see the boxes of both.
 - Tenport is open on the tailnet only, like Grafana. A public domain waits for more users.
 - The task home is a bucket archive, no longer a volume (tenbox #313). The old volumes move to
   the bucket outside this plan, so Tenport does not watch volumes.
@@ -300,7 +301,9 @@ The steps, in order:
 9. Costs: `GET /costs`, the `costs` command and `GET /metrics`, with the workers and the bucket.
 10. The `backup` command and `/docs`.
 11. The tenbox server stops: copy its data into Tenport, then delete `server/` and the CLI's
-    Kubernetes code from tenbox.
+    Kubernetes code from tenbox. Tenport's Jobs go back to the label `app: tenyard`, and the
+    pod label `box: "true"` (tenyard #123) goes: Tetragon and the process metrics select
+    `app: tenyard` again.
 
 ## Open questions
 

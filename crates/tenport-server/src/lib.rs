@@ -1,6 +1,6 @@
 pub mod accounts;
 mod agents;
-mod cluster;
+pub mod cluster;
 pub mod command;
 pub mod config;
 mod costs;

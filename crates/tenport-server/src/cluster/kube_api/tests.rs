@@ -1,0 +1,119 @@
+use k8s_openapi::api::batch::v1::{Job, JobStatus};
+use k8s_openapi::api::core::v1::{
+    ContainerState, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod,
+    PodStatus,
+};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
+use k8s_openapi::jiff::Timestamp;
+
+use super::*;
+
+fn meta(name: &str, second: i64) -> ObjectMeta {
+    ObjectMeta {
+        name: Some(name.to_owned()),
+        creation_timestamp: Some(Time(Timestamp::from_second(second).unwrap())),
+        labels: Some([("task".to_owned(), "TEN-1".to_owned())].into()),
+        ..ObjectMeta::default()
+    }
+}
+
+fn job_with(status: JobStatus) -> Job {
+    Job {
+        metadata: meta("task-ten-1-1117-101500", 1_700_000_000),
+        status: Some(status),
+        ..Job::default()
+    }
+}
+
+fn container(name: &str, state: ContainerState) -> ContainerStatus {
+    ContainerStatus {
+        name: name.to_owned(),
+        state: Some(state),
+        ..ContainerStatus::default()
+    }
+}
+
+fn pod_with(name: &str, second: i64, phase: &str, statuses: Vec<ContainerStatus>) -> Pod {
+    Pod {
+        metadata: meta(name, second),
+        status: Some(PodStatus {
+            phase: Some(phase.to_owned()),
+            container_statuses: Some(statuses),
+            ..PodStatus::default()
+        }),
+        ..Pod::default()
+    }
+}
+
+#[test]
+fn a_job_with_no_counts_is_running() {
+    let state = job_state(&job_with(JobStatus::default())).unwrap();
+    assert_eq!(state.phase, JobPhase::Running);
+    assert_eq!(state.name.as_str(), "task-ten-1-1117-101500");
+    assert_eq!(state.labels.get("task").map(String::as_str), Some("TEN-1"));
+    assert_eq!(state.created.unix_timestamp(), 1_700_000_000);
+}
+
+#[test]
+fn a_succeeded_or_failed_count_ends_the_job() {
+    let succeeded = job_with(JobStatus {
+        succeeded: Some(1),
+        ..JobStatus::default()
+    });
+    let failed = job_with(JobStatus {
+        failed: Some(1),
+        ..JobStatus::default()
+    });
+    assert_eq!(job_state(&succeeded).unwrap().phase, JobPhase::Succeeded);
+    assert_eq!(job_state(&failed).unwrap().phase, JobPhase::Failed);
+}
+
+#[test]
+fn a_job_without_a_name_is_left_out() {
+    let mut job = job_with(JobStatus::default());
+    job.metadata.name = None;
+    assert_eq!(job_state(&job), None);
+}
+
+#[test]
+fn a_pending_pod_tells_why_the_box_waits() {
+    let waiting = ContainerState {
+        waiting: Some(ContainerStateWaiting {
+            reason: Some("CreateContainerConfigError".to_owned()),
+            ..ContainerStateWaiting::default()
+        }),
+        ..ContainerState::default()
+    };
+    let pod = pod_with("p", 1, "Pending", vec![container("box", waiting)]);
+    let state = pod_state(&pod).unwrap();
+    assert!(!state.started);
+    assert_eq!(state.reason.as_deref(), Some("CreateContainerConfigError"));
+}
+
+#[test]
+fn the_reason_is_the_box_containers_not_the_sidecars() {
+    let ended = |reason: &str| ContainerState {
+        terminated: Some(ContainerStateTerminated {
+            reason: Some(reason.to_owned()),
+            ..ContainerStateTerminated::default()
+        }),
+        ..ContainerState::default()
+    };
+    let statuses = vec![
+        container("processes", ended("Completed")),
+        container("box", ended("OOMKilled")),
+    ];
+    let state = pod_state(&pod_with("p", 1, "Failed", statuses)).unwrap();
+    assert!(state.started);
+    assert_eq!(state.reason.as_deref(), Some("OOMKilled"));
+}
+
+#[test]
+fn the_newest_pod_is_the_one_read() {
+    let pods = vec![
+        pod_with("old", 1, "Failed", vec![]),
+        pod_with("new", 2, "Running", vec![]),
+    ];
+    let newest = newest_pod(pods).unwrap();
+    assert_eq!(newest.metadata.name.as_deref(), Some("new"));
+}
