@@ -1,5 +1,5 @@
 use reqwest::StatusCode;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::server::TestServer;
 
@@ -75,4 +75,17 @@ async fn matches_the_committed_openapi_json() {
         "the API differs from openapi.json: if the change is meant, run \
          TENPORT_WRITE_OPENAPI=1 cargo test -p tenport-server --test it openapi and commit it"
     );
+}
+
+#[tokio::test]
+async fn the_run_command_lists_the_tenbox_commands_and_their_flags() {
+    let commands = &openapi().await["components"]["schemas"]["NewRun"]["properties"]["command"]["x-tenbox-commands"];
+    assert_eq!(commands["plan"]["before_task"], json!(["show"]));
+    assert_eq!(commands["answer"]["positionals"], 1);
+    assert_eq!(
+        commands["pr"]["bool_flags"],
+        json!(["--ready", "--force", "--wait"])
+    );
+    assert_eq!(commands["start"]["value_flags"], json!(["--title"]));
+    assert_eq!(commands.as_object().unwrap().len(), 10);
 }

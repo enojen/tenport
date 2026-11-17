@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value, json};
 
 use crate::tasks::TaskId;
 
 const TOOL: &str = "tenbox";
-const PLAN_SHOW: &str = "show";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[serde(rename_all = "lowercase")]
@@ -73,7 +73,11 @@ impl CommandName {
                 bool_flags: &["--force"],
                 ..NO_FLAGS
             },
-            Self::Approve | Self::Status | Self::Plan => NO_FLAGS,
+            Self::Approve | Self::Status => NO_FLAGS,
+            Self::Plan => Shape {
+                before_task: &["show"],
+                ..NO_FLAGS
+            },
             Self::Pr => Shape {
                 bool_flags: &["--ready", "--force", "--wait"],
                 ..NO_FLAGS
@@ -100,6 +104,7 @@ impl CommandName {
 
 #[derive(Clone, Copy)]
 struct Shape {
+    before_task: &'static [&'static str],
     value_flags: &'static [&'static str],
     bool_flags: &'static [&'static str],
     positionals: usize,
@@ -107,6 +112,7 @@ struct Shape {
 }
 
 const NO_FLAGS: Shape = Shape {
+    before_task: &[],
     value_flags: &[],
     bool_flags: &[],
     positionals: 0,
@@ -149,11 +155,7 @@ fn checked_name(words: &[String], task: &TaskId) -> Option<CommandName> {
         return None;
     };
     let name = CommandName::find(word).filter(|_| tool == TOOL)?;
-    let after_name = if name == CommandName::Plan {
-        after_show(rest)?
-    } else {
-        rest
-    };
+    let after_name = after_words(rest, name.shape().before_task)?;
     let [id, args @ ..] = after_name else {
         return None;
     };
@@ -161,11 +163,12 @@ fn checked_name(words: &[String], task: &TaskId) -> Option<CommandName> {
     (is_task && args_fit(name.shape(), args)).then_some(name)
 }
 
-fn after_show(words: &[String]) -> Option<&[String]> {
-    match words {
-        [first, rest @ ..] if first == PLAN_SHOW => Some(rest),
-        _ => None,
-    }
+fn after_words<'a>(words: &'a [String], expected: &[&str]) -> Option<&'a [String]> {
+    let head = words.get(..expected.len())?;
+    head.iter()
+        .zip(expected)
+        .all(|(word, wanted)| word == wanted)
+        .then(|| &words[expected.len()..])
 }
 
 fn args_fit(shape: Shape, args: &[String]) -> bool {
@@ -204,6 +207,22 @@ fn shell_word(word: &str) -> String {
         return word.to_owned();
     }
     format!("'{}'", word.replace('\'', r"'\''"))
+}
+
+pub fn command_rules() -> Value {
+    let rules = CommandName::ALL
+        .into_iter()
+        .map(|name| (name.as_str().to_owned(), shape_rule(name.shape())));
+    Value::Object(Map::from_iter(rules))
+}
+
+fn shape_rule(shape: Shape) -> Value {
+    json!({
+        "before_task": shape.before_task,
+        "positionals": shape.positionals,
+        "value_flags": shape.value_flags,
+        "bool_flags": shape.bool_flags,
+    })
 }
 
 #[cfg(test)]

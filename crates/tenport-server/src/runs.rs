@@ -20,7 +20,7 @@ use crate::name::Name;
 use crate::projects::{self, Project, ProjectId, ProjectsError};
 use crate::tasks::TaskId;
 
-pub use command::{Command, CommandError, CommandName};
+pub use command::{Command, CommandError, CommandName, command_rules};
 pub use model::{
     Branch, BranchError, ClassName, ClassNameError, RunName, RunStarted, RunsEvent, ServiceName,
     ServiceNameError,

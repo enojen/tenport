@@ -121,7 +121,88 @@
             "items": {
               "type": "string"
             },
-            "type": "array"
+            "type": "array",
+            "x-tenbox-commands": {
+              "answer": {
+                "before_task": [],
+                "bool_flags": [],
+                "positionals": 1,
+                "value_flags": []
+              },
+              "approve": {
+                "before_task": [],
+                "bool_flags": [],
+                "positionals": 0,
+                "value_flags": []
+              },
+              "build": {
+                "before_task": [],
+                "bool_flags": [],
+                "positionals": 0,
+                "value_flags": []
+              },
+              "check": {
+                "before_task": [],
+                "bool_flags": [],
+                "positionals": 0,
+                "value_flags": [
+                  "--group",
+                  "--tier"
+                ]
+              },
+              "close": {
+                "before_task": [],
+                "bool_flags": [
+                  "--force"
+                ],
+                "positionals": 0,
+                "value_flags": []
+              },
+              "decide": {
+                "before_task": [],
+                "bool_flags": [
+                  "--no-build"
+                ],
+                "positionals": 0,
+                "value_flags": [
+                  "--json"
+                ]
+              },
+              "plan": {
+                "before_task": [
+                  "show"
+                ],
+                "bool_flags": [],
+                "positionals": 0,
+                "value_flags": []
+              },
+              "pr": {
+                "before_task": [],
+                "bool_flags": [
+                  "--ready",
+                  "--force",
+                  "--wait"
+                ],
+                "positionals": 0,
+                "value_flags": []
+              },
+              "start": {
+                "before_task": [],
+                "bool_flags": [
+                  "--force"
+                ],
+                "positionals": 0,
+                "value_flags": [
+                  "--title"
+                ]
+              },
+              "status": {
+                "before_task": [],
+                "bool_flags": [],
+                "positionals": 0,
+                "value_flags": []
+              }
+            }
           },
           "env": {
             "additionalProperties": {
