@@ -288,12 +288,30 @@ The steps, in order:
    and a Tailscale node, in tenyard's manifests. It answers `/health` on the tailnet. The
    `user add` command comes here, so the first admin can be made in the pod. Done (2026-11-17):
    tenport #18 and tenyard #122; the first admin is made.
-3. Next. Tenport starts the Jobs: `POST /runs` to start one, its state and log, stop, and delete a
-   task. The template comes from the ConfigMap.
+3. Now. Tenport starts the Jobs. The template comes from the ConfigMaps `run-template` and
+   `run-services` (tenyard #124). A run is one tenbox command in a box; its Kubernetes object is
+   one Job with one pod, and the run has the Job's name. The run stays in Tenport after the Job
+   is deleted. Its events are `run.started` and, in step 5, `run.finished`.
+   - Done: the cluster client (tenport #20), `POST /runs` (tenport #21), the box label
+     (tenyard #123), the Role and the ConfigMaps (tenyard #124).
+   - Next, one PR: `GET /runs?project=<id>&task=<id>` lists the runs of a task (the CLI's
+     `machine ls`); `GET /runs/{name}` gives one run: `name`, `project`, `task`, `command`,
+     `class`, `created`, `phase` and `reason`; `GET /runs/{name}/log?follow=true` gives the
+     log of the box container as plain text; `DELETE /runs/{name}` stops the run and deletes
+     its Job and pod (the CLI's `machine stop` lists the running runs of the task and deletes
+     each). `phase` uses the Kubernetes words `Running`, `Succeeded`, `Failed`, and `Unknown`
+     when the Job is gone (10 minutes after it ends) and no `run.finished` is stored yet.
+     `reason` is the box container's, such as `OOMKilled` or `CreateContainerConfigError`.
+     404 for a run Tenport does not know, 403 for a user outside the project's organization.
+   - Then the image of tenport main in tenyard, and a real run.
+   - Deleting a task moves to step 4: with no task volumes, a task has only its bucket archive
+     to delete, and that needs the bucket keys of step 4.
 4. What a run needs comes from Tenport: the project Secrets, the presigned links of the bucket
    archive (the bucket keys in Tenport's env), the GitHub App token, the placeholder Secret and
-   `POST /run-credentials`.
-5. The runs: `run.finished` and `GET /tasks/{task}/runs`.
+   `POST /run-credentials`. Deleting a task, which deletes its bucket archive (the CLI's
+   `machine rm`).
+5. The runs: `run.finished`, so `GET /runs?project=<id>&task=<id>` and `GET /runs/{name}` keep
+   the phase after the Job is deleted.
 6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/rm/ls` go to
    Tenport. The kubeconfig and the bucket key file leave the computer.
 7. The agent in a box reaches Tenport from inside the cluster with a run token that starts runs
