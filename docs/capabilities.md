@@ -317,6 +317,10 @@ The steps, in order:
    the phase after the Job is deleted.
 6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/rm/ls` go to
    Tenport. The kubeconfig and the bucket key file leave the computer.
+   - To decide here: a client that only follows `Retry-After` asks forever when the box
+     cannot start, such as with `CreateContainerConfigError`, because that reason does not
+     go away alone. The 409 `box-not-started` carries the reason, so the CLI can stop on a
+     reason that is an error and show it.
 7. The agent in a box reaches Tenport from inside the cluster with a run token that starts runs
    in its own project only, with a limit on nested runs and on open runs at one time.
 8. The cluster watch: nodes, with their Hetzner type and price.
