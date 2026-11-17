@@ -1,42 +1,17 @@
 use std::path::Path;
 
 use super::*;
-use crate::accounts::{self, GithubLogin, NewUser, Registered, Registration, Role};
+use crate::accounts::Role;
+use crate::fixtures::{project_of, register};
 use std::time::Duration;
 
 use futures::future::join_all;
 
 use crate::cluster::{FakeCluster, JobName};
 use crate::db;
-use crate::projects::{NewProject, Repo};
 
 const STARTED_TOGETHER: usize = 8;
 const CREATE_TIME: Duration = Duration::from_millis(50);
-
-async fn register(db: &Db, org: &str, github: &str) -> Registered {
-    let registration = Registration {
-        org: Name::parse(org).unwrap(),
-        user: NewUser {
-            name: Name::parse(github).unwrap(),
-            email: None,
-            github: GithubLogin::parse(github).unwrap(),
-        },
-        role: Role::Admin,
-        token_name: Name::parse("laptop").unwrap(),
-    };
-    accounts::register(db, Actor::Server, registration)
-        .await
-        .unwrap()
-}
-
-async fn project_of(db: &Db, owner: &Registered) -> ProjectId {
-    let new = NewProject {
-        org: owner.org.clone(),
-        name: Name::parse("Tenport").unwrap(),
-        repo: Repo::parse("enojen/tenport").unwrap(),
-    };
-    projects::add(db, &owner.user, new).await.unwrap().id
-}
 
 fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
     let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
@@ -75,7 +50,7 @@ async fn count_runs(db: &Db) -> i64 {
 #[tokio::test]
 async fn a_started_run_is_a_job_on_the_cluster_and_a_run_in_the_database() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::default());
     let run = runs_on(cluster.clone())
@@ -92,7 +67,7 @@ async fn a_started_run_is_a_job_on_the_cluster_and_a_run_in_the_database() {
 #[tokio::test]
 async fn a_second_run_of_the_task_waits_until_the_first_job_ends() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::default());
     let runs = runs_on(cluster.clone());
@@ -107,7 +82,7 @@ async fn a_second_run_of_the_task_waits_until_the_first_job_ends() {
 #[tokio::test]
 async fn runs_of_the_task_started_together_make_one_job() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::with_create_time(CREATE_TIME));
     let runs = runs_on(cluster.clone());
@@ -124,14 +99,17 @@ async fn runs_of_the_task_started_together_make_one_job() {
 #[tokio::test]
 async fn only_a_member_of_the_projects_organization_starts_a_run() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
-    let stranger = register(&db, "Other", "someone").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
+    let stranger = register(&db, "Other", "someone", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::default());
     let refused = runs_on(cluster.clone())
         .start(&db, &stranger.user, build(&project))
         .await;
-    assert!(matches!(refused, Err(RunsError::NotMember { .. })));
+    assert!(matches!(
+        refused,
+        Err(RunsError::Projects(ProjectsError::NotMember { .. }))
+    ));
     assert!(cluster.jobs().is_empty());
 }
 

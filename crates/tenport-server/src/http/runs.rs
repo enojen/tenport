@@ -17,7 +17,7 @@ use super::error::{HttpError, PROBLEM_JSON, Problem};
 use crate::accounts::Email;
 use crate::cluster::LogReader;
 use crate::name::Name;
-use crate::projects::ProjectId;
+use crate::projects::{ProjectId, ProjectsError};
 use crate::runs::{self, Branch, ClassName, Command, RunName, RunPhase, RunsError, ServiceName};
 use crate::tasks::TaskId;
 
@@ -244,7 +244,9 @@ fn log_chunks(reader: LogReader) -> impl Stream<Item = std::io::Result<Bytes>> {
 
 fn run_error(error: RunsError) -> HttpError {
     match error {
-        RunsError::NotMember { .. } => HttpError::Forbidden(error.to_string()),
+        RunsError::Projects(ProjectsError::NotMember { .. }) => {
+            HttpError::Forbidden(error.to_string())
+        }
         RunsError::NotFound { .. } => HttpError::NotFound(error.to_string()),
         RunsError::NotStarted { .. } => HttpError::BoxNotStarted(error.to_string()),
         RunsError::JobGone { .. } => HttpError::JobGone(error.to_string()),
@@ -289,7 +291,9 @@ fn new_run(body: NewRun) -> Result<runs::NewRun, HttpError> {
 
 fn start_error(error: RunsError) -> HttpError {
     match error {
-        RunsError::NotMember { .. } => HttpError::Forbidden(error.to_string()),
+        RunsError::Projects(ProjectsError::NotMember { .. }) => {
+            HttpError::Forbidden(error.to_string())
+        }
         RunsError::Busy { .. } => HttpError::MachineBusy(error.to_string()),
         RunsError::Template(
             runs::TemplateError::NoClass { .. } | runs::TemplateError::NoService { .. },

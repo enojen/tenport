@@ -17,6 +17,8 @@ pub use model::{Project, ProjectAdded, ProjectId, ProjectsEvent, Repo, RepoError
 pub enum ProjectsError {
     #[error("only an admin of the organization {org} adds a project to it")]
     NotAdmin { org: OrgId },
+    #[error("only a member of the organization of the project {project} uses it")]
+    NotMember { project: ProjectId },
     #[error(transparent)]
     Accounts(#[from] AccountsError),
     #[error(transparent)]
@@ -61,11 +63,19 @@ pub(crate) async fn apply(
     Ok(())
 }
 
-pub async fn is_member(db: &Db, user: &UserId, project: &ProjectId) -> Result<bool, ProjectsError> {
-    Ok(find_project_for_member(db, user, project).await?.is_some())
+pub async fn require_member(
+    db: &Db,
+    user: &UserId,
+    project: &ProjectId,
+) -> Result<Project, ProjectsError> {
+    find_project_for_member(db, user, project)
+        .await?
+        .ok_or_else(|| ProjectsError::NotMember {
+            project: project.clone(),
+        })
 }
 
-pub async fn find_project_for_member(
+async fn find_project_for_member(
     db: &Db,
     user: &UserId,
     project: &ProjectId,

@@ -1,22 +1,6 @@
 use super::*;
-use crate::accounts::{GithubLogin, NewUser, Registered, Registration};
 use crate::db;
-
-async fn register(db: &Db, org: &str, github: &str, role: Role) -> Registered {
-    let registration = Registration {
-        org: Name::parse(org).unwrap(),
-        user: NewUser {
-            name: Name::parse(github).unwrap(),
-            email: None,
-            github: GithubLogin::parse(github).unwrap(),
-        },
-        role,
-        token_name: Name::parse("laptop").unwrap(),
-    };
-    accounts::register(db, Actor::Server, registration)
-        .await
-        .unwrap()
-}
+use crate::fixtures::register;
 
 fn new_project(org: &OrgId, name: &str) -> NewProject {
     NewProject {

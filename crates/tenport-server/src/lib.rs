@@ -6,6 +6,8 @@ pub mod config;
 mod costs;
 pub mod db;
 pub mod events;
+#[cfg(test)]
+mod fixtures;
 pub mod http;
 mod id;
 pub mod logs;
