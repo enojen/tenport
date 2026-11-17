@@ -11,6 +11,10 @@ const RUN_TEMPLATE: &str = "TENPORT_RUN_TEMPLATE";
 const RUN_SERVICES: &str = "TENPORT_RUN_SERVICES";
 const RUN_NAMESPACE: &str = "TENPORT_RUN_NAMESPACE";
 const BOX_IMAGE: &str = "TENPORT_BOX_IMAGE";
+const TASK_ARCHIVE_BUCKET: &str = "TENPORT_TASK_ARCHIVE_BUCKET";
+const TASK_ARCHIVE_BUCKET_REGION: &str = "TENPORT_TASK_ARCHIVE_BUCKET_REGION";
+const TASK_ARCHIVE_BUCKET_KEY_FILE: &str = "TENPORT_TASK_ARCHIVE_BUCKET_KEY_FILE";
+const TASK_ARCHIVE_BUCKET_SECRET_FILE: &str = "TENPORT_TASK_ARCHIVE_BUCKET_SECRET_FILE";
 const DEFAULT_LISTEN: &str = "127.0.0.1:8080";
 const DEFAULT_RUN_TEMPLATE: &str = "/etc/tenport/run-template";
 const DEFAULT_RUN_SERVICES: &str = "/etc/tenport/run-services";
@@ -25,6 +29,15 @@ pub struct Config {
     pub run_services: PathBuf,
     pub run_namespace: String,
     pub box_image: String,
+    pub task_archive_bucket: Option<TaskArchiveBucketConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskArchiveBucketConfig {
+    pub url: String,
+    pub region: String,
+    pub key_file: PathBuf,
+    pub secret_file: PathBuf,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -48,6 +61,7 @@ impl Config {
             run_services: PathBuf::from(or_default(lookup(RUN_SERVICES), DEFAULT_RUN_SERVICES)),
             run_namespace: or_default(lookup(RUN_NAMESPACE), DEFAULT_RUN_NAMESPACE),
             box_image: or_default(lookup(BOX_IMAGE), DEFAULT_BOX_IMAGE),
+            task_archive_bucket: task_archive_bucket(&lookup)?,
         })
     }
 }
@@ -64,6 +78,27 @@ fn database(value: Option<String>) -> Result<PathBuf, ConfigError> {
     value
         .map(PathBuf::from)
         .ok_or(ConfigError::Missing { name: DATABASE })
+}
+
+fn task_archive_bucket(
+    lookup: &impl Fn(&str) -> Option<String>,
+) -> Result<Option<TaskArchiveBucketConfig>, ConfigError> {
+    let names = [
+        TASK_ARCHIVE_BUCKET,
+        TASK_ARCHIVE_BUCKET_REGION,
+        TASK_ARCHIVE_BUCKET_KEY_FILE,
+        TASK_ARCHIVE_BUCKET_SECRET_FILE,
+    ];
+    if names.iter().all(|name| lookup(name).is_none()) {
+        return Ok(None);
+    }
+    let required = |name: &'static str| lookup(name).ok_or(ConfigError::Missing { name });
+    Ok(Some(TaskArchiveBucketConfig {
+        url: required(TASK_ARCHIVE_BUCKET)?,
+        region: required(TASK_ARCHIVE_BUCKET_REGION)?,
+        key_file: PathBuf::from(required(TASK_ARCHIVE_BUCKET_KEY_FILE)?),
+        secret_file: PathBuf::from(required(TASK_ARCHIVE_BUCKET_SECRET_FILE)?),
+    }))
 }
 
 fn or_default(value: Option<String>, default: &str) -> String {

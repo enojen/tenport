@@ -10,6 +10,7 @@ use tenport_server::events::Actor;
 use tenport_server::http::{AppState, Limiter, Limits, router};
 use tenport_server::name::Name;
 use tenport_server::runs::{RunTemplate, Runs};
+use tenport_server::task_archives::TaskArchiveBucket;
 use tokio::net::TcpListener;
 
 pub struct TestServer {
@@ -80,5 +81,15 @@ fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
         dir: tests.join("run-template"),
         services_dir: tests.join("run-services"),
     };
-    Runs::new(cluster, template, "box:1".to_owned())
+    Runs::new(cluster, template, "box:1".to_owned(), test_bucket())
+}
+
+fn test_bucket() -> TaskArchiveBucket {
+    TaskArchiveBucket::new(
+        "https://objects.example.test/tenbox-test",
+        "hel1",
+        "key-id".to_owned(),
+        "key-secret".to_owned(),
+    )
+    .unwrap()
 }

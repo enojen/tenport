@@ -14,5 +14,6 @@ pub mod logs;
 pub mod name;
 pub mod projects;
 pub mod runs;
+pub mod task_archives;
 pub mod tasks;
 pub mod tracker;

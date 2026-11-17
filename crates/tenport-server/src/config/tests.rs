@@ -68,3 +68,51 @@ fn reads_the_run_settings_that_are_set() {
     assert_eq!(config.run_namespace, "boxes");
     assert_eq!(config.box_image, "box:1");
 }
+
+#[test]
+fn has_no_archive_bucket_when_none_of_its_names_is_set() {
+    let config = config(&[(DATABASE, "tenport.db")]).unwrap();
+    assert_eq!(config.task_archive_bucket, None);
+}
+
+#[test]
+fn reads_the_archive_bucket_when_all_its_names_are_set() {
+    let config = config(&[
+        (DATABASE, "tenport.db"),
+        (
+            TASK_ARCHIVE_BUCKET,
+            "https://objects.example.test/tenbox-test",
+        ),
+        (TASK_ARCHIVE_BUCKET_REGION, "hel1"),
+        (TASK_ARCHIVE_BUCKET_KEY_FILE, "/bucket/key"),
+        (TASK_ARCHIVE_BUCKET_SECRET_FILE, "/bucket/secret"),
+    ])
+    .unwrap();
+    assert_eq!(
+        config.task_archive_bucket,
+        Some(TaskArchiveBucketConfig {
+            url: "https://objects.example.test/tenbox-test".to_owned(),
+            region: "hel1".to_owned(),
+            key_file: PathBuf::from("/bucket/key"),
+            secret_file: PathBuf::from("/bucket/secret"),
+        })
+    );
+}
+
+#[test]
+fn refuses_an_archive_bucket_that_misses_one_of_its_names() {
+    assert_eq!(
+        config(&[
+            (DATABASE, "tenport.db"),
+            (
+                TASK_ARCHIVE_BUCKET,
+                "https://objects.example.test/tenbox-test"
+            ),
+            (TASK_ARCHIVE_BUCKET_REGION, "hel1"),
+            (TASK_ARCHIVE_BUCKET_KEY_FILE, "/bucket/key"),
+        ]),
+        Err(ConfigError::Missing {
+            name: TASK_ARCHIVE_BUCKET_SECRET_FILE
+        })
+    );
+}
