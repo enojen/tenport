@@ -21,11 +21,15 @@ pub struct TestServer {
 
 impl TestServer {
     pub async fn start() -> Self {
+        Self::start_on(FakeCluster::default()).await
+    }
+
+    pub async fn start_on(cluster: FakeCluster) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let db = db::open(&dir.path().join("tenport.db")).await.unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        let cluster = Arc::new(FakeCluster::default());
+        let cluster = Arc::new(cluster);
         let runs = runs_on(cluster.clone());
         let app = router(AppState {
             db: db.clone(),
@@ -66,12 +70,9 @@ impl TestServer {
 
 fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
     let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    Runs {
-        cluster,
-        template: RunTemplate {
-            dir: tests.join("run-template"),
-            services_dir: tests.join("run-services"),
-        },
-        box_image: "box:1".to_owned(),
-    }
+    let template = RunTemplate {
+        dir: tests.join("run-template"),
+        services_dir: tests.join("run-services"),
+    };
+    Runs::new(cluster, template, "box:1".to_owned())
 }

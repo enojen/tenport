@@ -135,7 +135,9 @@ fn job_state(job: &Job) -> Option<JobState> {
 }
 
 fn job_phase(job: &Job) -> JobPhase {
-    let status = job.status.clone().unwrap_or_default();
+    let Some(status) = job.status.as_ref() else {
+        return JobPhase::Running;
+    };
     if status.succeeded.unwrap_or(0) > 0 {
         return JobPhase::Succeeded;
     }
@@ -156,20 +158,19 @@ fn newest_pod(pods: Vec<Pod>) -> Option<Pod> {
 
 fn pod_state(pod: &Pod) -> Option<PodState> {
     let name = PodName::new(pod.metadata.name.clone()?);
-    let status = pod.status.clone().unwrap_or_default();
+    let status = pod.status.as_ref();
     let started = status
-        .phase
-        .as_deref()
+        .and_then(|status| status.phase.as_deref())
         .is_some_and(|phase| phase != PENDING);
     let box_status = status
-        .container_statuses
+        .and_then(|status| status.container_statuses.as_deref())
         .unwrap_or_default()
-        .into_iter()
+        .iter()
         .find(|container| container.name == BOX_CONTAINER);
     Some(PodState {
         name,
         started,
-        reason: box_status.as_ref().and_then(box_reason),
+        reason: box_status.and_then(box_reason),
     })
 }
 

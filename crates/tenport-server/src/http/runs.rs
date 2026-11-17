@@ -80,10 +80,10 @@ pub async fn start_run(
 ) -> Result<(StatusCode, Json<Run>), HttpError> {
     let Json(body) = body?;
     let new = new_run(body)?;
-    let run = state
-        .runs
-        .start(&state.db, &user.id, new)
+    let start = async move { state.runs.start(&state.db, &user.id, new).await };
+    let run = tokio::spawn(start)
         .await
+        .map_err(HttpError::internal)?
         .map_err(start_error)?;
     Ok((StatusCode::CREATED, Json(run.into())))
 }

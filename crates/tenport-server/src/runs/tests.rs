@@ -2,9 +2,16 @@ use std::path::Path;
 
 use super::*;
 use crate::accounts::{self, GithubLogin, NewUser, Registered, Registration, Role};
+use std::time::Duration;
+
+use futures::future::join_all;
+
 use crate::cluster::{FakeCluster, JobName};
 use crate::db;
 use crate::projects::{NewProject, Repo};
+
+const STARTED_TOGETHER: usize = 8;
+const CREATE_TIME: Duration = Duration::from_millis(50);
 
 async fn register(db: &Db, org: &str, github: &str) -> Registered {
     let registration = Registration {
@@ -33,14 +40,11 @@ async fn project_of(db: &Db, owner: &Registered) -> ProjectId {
 
 fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
     let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    Runs {
-        cluster,
-        template: RunTemplate {
-            dir: tests.join("run-template"),
-            services_dir: tests.join("run-services"),
-        },
-        box_image: "box:1".to_owned(),
-    }
+    let template = RunTemplate {
+        dir: tests.join("run-template"),
+        services_dir: tests.join("run-services"),
+    };
+    Runs::new(cluster, template, "box:1".to_owned())
 }
 
 fn build(project: &ProjectId) -> NewRun {
@@ -98,6 +102,23 @@ async fn a_second_run_of_the_task_waits_until_the_first_job_ends() {
     cluster.set_phase(&JobName::new(first.name.as_str()), JobPhase::Succeeded);
     let after_end = runs.start(&db, &owner.user, build(&project)).await;
     assert!(!matches!(after_end, Err(RunsError::Busy { .. })));
+}
+
+#[tokio::test]
+async fn runs_of_the_task_started_together_make_one_job() {
+    let (db, _dir) = db::temp().await;
+    let owner = register(&db, "Wegobi", "enojen").await;
+    let project = project_of(&db, &owner).await;
+    let cluster = Arc::new(FakeCluster::with_create_time(CREATE_TIME));
+    let runs = runs_on(cluster.clone());
+    let starts = (0..STARTED_TOGETHER).map(|_| runs.start(&db, &owner.user, build(&project)));
+    let started = join_all(starts).await;
+    let busy = started
+        .iter()
+        .filter(|started| matches!(started, Err(RunsError::Busy { .. })))
+        .count();
+    assert_eq!(busy, STARTED_TOGETHER - 1);
+    assert_eq!(cluster.jobs().len(), 1);
 }
 
 #[tokio::test]

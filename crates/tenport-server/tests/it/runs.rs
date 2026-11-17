@@ -1,9 +1,13 @@
+use std::time::Duration;
+
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tenport_server::accounts::{Role, Token};
-use tenport_server::cluster::{JobName, JobPhase, PodName, PodState};
+use tenport_server::cluster::{FakeCluster, JobName, JobPhase, PodName, PodState};
 
 use crate::server::TestServer;
+
+const CREATE_TIME: Duration = Duration::from_millis(300);
 
 async fn project_of(server: &TestServer, token: &Token) -> String {
     let me: Value = reqwest::Client::new()
@@ -314,4 +318,33 @@ async fn the_log_of_a_stopped_run_is_a_conflict_that_says_the_job_is_gone() {
     let detail = problem["detail"].as_str().unwrap();
     assert!(detail.contains("its Job is gone"), "{detail}");
     assert_eq!(problem["code"], "job-gone");
+}
+
+#[tokio::test]
+async fn a_run_is_recorded_when_the_client_leaves_before_the_answer() {
+    let server = TestServer::start_on(FakeCluster::with_create_time(CREATE_TIME)).await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let project = project_of(&server, &token).await;
+    let left = reqwest::Client::builder()
+        .timeout(CREATE_TIME / 3)
+        .build()
+        .unwrap()
+        .post(server.url("/runs"))
+        .bearer_auth(token.expose())
+        .json(&build(&project))
+        .send()
+        .await;
+    assert!(left.unwrap_err().is_timeout());
+    tokio::time::sleep(CREATE_TIME * 2).await;
+    let runs: Value = get(
+        &server,
+        &token,
+        &format!("/runs?project={project}&task=TEN-301"),
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(server.cluster.jobs().len(), 1);
+    assert_eq!(runs.as_array().unwrap().len(), 1);
 }

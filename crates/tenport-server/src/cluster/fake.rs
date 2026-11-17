@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use futures::FutureExt;
 use futures::future::{BoxFuture, ready};
@@ -15,6 +16,7 @@ use super::model::{
 #[derive(Default)]
 pub struct FakeCluster {
     jobs: Mutex<BTreeMap<JobName, FakeJob>>,
+    create_time: Duration,
 }
 
 struct FakeJob {
@@ -30,6 +32,13 @@ struct FakePod {
 }
 
 impl FakeCluster {
+    pub fn with_create_time(create_time: Duration) -> Self {
+        Self {
+            create_time,
+            ..Self::default()
+        }
+    }
+
     pub fn jobs(&self) -> Vec<Job> {
         self.lock().values().map(|fake| fake.job.clone()).collect()
     }
@@ -112,7 +121,11 @@ impl FakeCluster {
 
 impl Cluster for FakeCluster {
     fn create_job(&self, job: Job) -> BoxFuture<'_, Result<JobName, ClusterError>> {
-        ready(self.create(job)).boxed()
+        async move {
+            tokio::time::sleep(self.create_time).await;
+            self.create(job)
+        }
+        .boxed()
     }
 
     fn list_jobs<'a>(
