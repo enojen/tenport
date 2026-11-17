@@ -306,6 +306,10 @@ The steps, in order:
 1. Is the two-phase plan for Claude right?
 2. In phase 2, does the API key belong to the organization or to the user?
 3. Do "Start planner" and "Stop" go in the panel, or only in the CLI?
-4. Is login with GitHub only?
+4. Is login with GitHub only? Notes (2026-11-17): Tenport is shared infrastructure. Whoever
+   registers makes a new organization and is its admin; an admin invites the others. Running
+   agents on the cluster comes after a payment or a credit (later). Until then, registration is
+   open only to a list of allowed GitHub logins. When the login page comes, `tenport user add`
+   stays only for an emergency, or goes.
 5. Try Remote Control in a pod before the server work: does it start without a question?
 6. Which name does a task state use: `todo` or `waiting`?
