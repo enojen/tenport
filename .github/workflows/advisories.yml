@@ -1,0 +1,19 @@
+name: advisories
+on:
+  push:
+    paths: [Cargo.lock, deny.toml, .github/workflows/advisories.yml]
+  pull_request:
+    paths: [Cargo.lock, deny.toml, .github/workflows/advisories.yml]
+  schedule:
+    - cron: "0 5 * * *"
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@70f81531115945ba6eb6b941ec9d39d063438eb9
+        with:
+          command: check advisories

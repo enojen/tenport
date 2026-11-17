@@ -1,0 +1,5 @@
+[advisories]
+unused-ignored-advisory = "deny"
+ignore = [
+    { id = "RUSTSEC-2026-0459", reason = "sqlx-sqlite 0.9.0 holds libsqlite3-sys below 0.38; sqlx main allows the fixed 0.39 since launchbadge/sqlx#4525, not yet released. Only the server opens its database and WAL files.", expiry = "2026-12-31" },
+]
