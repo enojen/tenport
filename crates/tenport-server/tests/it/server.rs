@@ -1,16 +1,21 @@
 use std::net::SocketAddr;
+use std::path::Path;
+use std::sync::Arc;
 
 use tempfile::TempDir;
 use tenport_server::accounts::{self, GithubLogin, NewUser, Registration, Role, Token};
+use tenport_server::cluster::FakeCluster;
 use tenport_server::db::{self, Db};
 use tenport_server::events::Actor;
 use tenport_server::http::{AppState, router};
 use tenport_server::name::Name;
+use tenport_server::runs::{RunTemplate, Runs};
 use tokio::net::TcpListener;
 
 pub struct TestServer {
     pub address: SocketAddr,
     pub db: Db,
+    pub cluster: Arc<FakeCluster>,
     _dir: TempDir,
 }
 
@@ -20,11 +25,17 @@ impl TestServer {
         let db = db::open(&dir.path().join("tenport.db")).await.unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        let app = router(AppState { db: db.clone() });
+        let cluster = Arc::new(FakeCluster::default());
+        let runs = runs_on(cluster.clone());
+        let app = router(AppState {
+            db: db.clone(),
+            runs: Arc::new(runs),
+        });
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         Self {
             address,
             db,
+            cluster,
             _dir: dir,
         }
     }
@@ -50,5 +61,17 @@ impl TestServer {
             .await
             .unwrap()
             .token
+    }
+}
+
+fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
+    let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    Runs {
+        cluster,
+        template: RunTemplate {
+            dir: tests.join("run-template"),
+            services_dir: tests.join("run-services"),
+        },
+        box_image: "box:1".to_owned(),
     }
 }

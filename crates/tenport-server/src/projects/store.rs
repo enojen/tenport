@@ -41,13 +41,15 @@ pub async fn list_projects_of_user(
     .await
 }
 
-pub async fn find_project_of_member(
+pub async fn find_project_for_member(
     conn: &mut SqliteConnection,
     project: &ProjectId,
     user: &UserId,
-) -> Result<Option<ProjectId>, sqlx::Error> {
-    sqlx::query_scalar!(
-        r#"select projects.id as "id: ProjectId"
+) -> Result<Option<Project>, sqlx::Error> {
+    sqlx::query_as!(
+        Project,
+        r#"select projects.id as "id: _", projects.org_id as "org: _", projects.name as "name: _",
+                  projects.repo as "repo: _"
            from projects join memberships on memberships.org_id = projects.org_id
            where projects.id = ? and memberships.user_id = ?"#,
         project,

@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "select count(*) from runs",
+  "describe": {
+    "columns": [
+      {
+        "name": "count(*)",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8c5eef73c7e68cc996caef5d3b8152993eebe4921c6f17a7469ac6a7bf70c606"
+}

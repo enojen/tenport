@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 use crate::db::Db;
-use crate::{accounts, projects, tasks};
+use crate::{accounts, projects, runs, tasks};
 
 pub use model::{Actor, Entry, Event, EventId};
 
@@ -133,6 +133,7 @@ async fn apply(
         Event::Accounts(event) => accounts::apply(conn, event, &stamp).await?,
         Event::Projects(event) => projects::apply(conn, event, &stamp).await?,
         Event::Tasks(event) => tasks::apply(conn, event, &stamp).await?,
+        Event::Runs(event) => runs::apply(conn, event, &stamp).await?,
     }
     Ok(())
 }

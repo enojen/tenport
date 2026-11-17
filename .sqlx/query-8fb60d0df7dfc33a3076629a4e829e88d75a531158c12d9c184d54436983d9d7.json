@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "insert into runs (name, project_id, task_id, command, class, created_at, created_by)\n         values (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "8fb60d0df7dfc33a3076629a4e829e88d75a531158c12d9c184d54436983d9d7"
+}
