@@ -54,14 +54,11 @@ async fn serve() -> anyhow::Result<()> {
     let cluster = KubeCluster::connect(&config.run_namespace)
         .await
         .context("cannot reach the Kubernetes API")?;
-    let runs = Runs {
-        cluster: Arc::new(cluster),
-        template: RunTemplate {
-            dir: config.run_template,
-            services_dir: config.run_services,
-        },
-        box_image: config.box_image,
+    let template = RunTemplate {
+        dir: config.run_template,
+        services_dir: config.run_services,
     };
+    let runs = Runs::new(Arc::new(cluster), template, config.box_image);
     let listener = TcpListener::bind(config.listen)
         .await
         .with_context(|| format!("cannot listen on {}", config.listen))?;

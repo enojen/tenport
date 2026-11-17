@@ -115,27 +115,27 @@ struct EnvValue {
 }
 
 impl RunTemplate {
-    pub fn job(
+    pub async fn job(
         &self,
         fields: &TemplateFields,
         services: &[ServiceName],
     ) -> Result<Job, TemplateError> {
-        let resources = self.resources(&fields.class)?;
-        let patches = services
-            .iter()
-            .map(|service| self.service(service))
-            .collect::<Result<Vec<_>, _>>()?;
+        let resources = self.resources(&fields.class).await?;
+        let mut patches = Vec::with_capacity(services.len());
+        for service in services {
+            patches.push(self.service(service).await?);
+        }
         let pairs = placeholders(fields, &resources, &box_env(fields, &patches));
         let path = self.dir.join(JOB_FILE);
-        let mut job = fill(read_yaml::<Value>(&path)?, &pairs);
+        let mut job = fill(read_yaml::<Value>(&path).await?, &pairs);
         add_services(&mut job, patches);
         mark_managed(&mut job);
         serde_json::from_value(job).map_err(|error| invalid(&path, error))
     }
 
-    fn resources(&self, class: &ClassName) -> Result<Resources, TemplateError> {
+    async fn resources(&self, class: &ClassName) -> Result<Resources, TemplateError> {
         let path = self.dir.join(CLASSES_FILE);
-        let mut classes: BTreeMap<String, Resources> = read_yaml(&path)?;
+        let mut classes: BTreeMap<String, Resources> = read_yaml(&path).await?;
         classes
             .remove(class.as_str())
             .ok_or_else(|| TemplateError::NoClass {
@@ -144,12 +144,12 @@ impl RunTemplate {
             })
     }
 
-    fn service(&self, service: &ServiceName) -> Result<ServicePodSpec, TemplateError> {
+    async fn service(&self, service: &ServiceName) -> Result<ServicePodSpec, TemplateError> {
         let path = self
             .services_dir
             .join(service.as_str())
             .with_extension(SERVICE_EXTENSION);
-        let spec = match read_yaml::<ServicePatch>(&path) {
+        let spec = match read_yaml::<ServicePatch>(&path).await {
             Err(TemplateError::Read { source, .. }) if source.kind() == ErrorKind::NotFound => {
                 return Err(TemplateError::NoService {
                     service: service.clone(),
@@ -171,11 +171,13 @@ impl RunTemplate {
     }
 }
 
-fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T, TemplateError> {
-    let text = std::fs::read_to_string(path).map_err(|source| TemplateError::Read {
-        path: path.to_owned(),
-        source,
-    })?;
+async fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T, TemplateError> {
+    let text = tokio::fs::read_to_string(path)
+        .await
+        .map_err(|source| TemplateError::Read {
+            path: path.to_owned(),
+            source,
+        })?;
     serde_saphyr::from_str(&text).map_err(|error| invalid(path, error))
 }
 

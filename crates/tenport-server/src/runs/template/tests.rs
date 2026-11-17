@@ -55,9 +55,9 @@ fn env_value<'a>(container: &'a Container, name: &str) -> Option<&'a str> {
     env.iter().find(|e| e.name == name)?.value.as_deref()
 }
 
-#[test]
-fn the_fields_and_the_class_fill_the_job() {
-    let job = template().job(&fields("build"), &[]).unwrap();
+#[tokio::test]
+async fn the_fields_and_the_class_fill_the_job() {
+    let job = template().job(&fields("build"), &[]).await.unwrap();
     assert_eq!(
         job.metadata.name.as_deref(),
         Some("task-ten-301-1117-101500")
@@ -82,9 +82,9 @@ fn the_fields_and_the_class_fill_the_job() {
     assert_eq!(limits["memory"].0, "2Gi");
 }
 
-#[test]
-fn tenport_manages_the_job_and_the_tenbox_server_does_not_see_it() {
-    let job = template().job(&fields("build"), &[]).unwrap();
+#[tokio::test]
+async fn tenport_manages_the_job_and_the_tenbox_server_does_not_see_it() {
+    let job = template().job(&fields("build"), &[]).await.unwrap();
     let pod_labels = job
         .spec
         .as_ref()
@@ -110,12 +110,13 @@ fn box_env_of(job: &Job) -> BTreeMap<String, String> {
     serde_json::from_str(env_value(box_container(job), "TENBOX_ENV").unwrap()).unwrap()
 }
 
-#[test]
-fn a_service_adds_its_sidecar_volume_and_env() {
+#[tokio::test]
+async fn a_service_adds_its_sidecar_volume_and_env() {
     let mut without_project_env = fields("build");
     without_project_env.env.clear();
     let job = template()
         .job(&without_project_env, &[service("postgres")])
+        .await
         .unwrap();
     let sidecars: Vec<&str> = pod(&job)
         .init_containers
@@ -139,22 +140,23 @@ fn a_service_adds_its_sidecar_volume_and_env() {
     );
 }
 
-#[test]
-fn the_projects_env_wins_over_a_services_env() {
+#[tokio::test]
+async fn the_projects_env_wins_over_a_services_env() {
     let job = template()
         .job(&fields("build"), &[service("postgres")])
+        .await
         .unwrap();
     assert_eq!(box_env_of(&job)["TEST_PG_URL"], "from-project");
 }
 
-#[test]
-fn an_unknown_class_or_service_is_named() {
+#[tokio::test]
+async fn an_unknown_class_or_service_is_named() {
     assert!(matches!(
-        template().job(&fields("huge"), &[]),
+        template().job(&fields("huge"), &[]).await,
         Err(TemplateError::NoClass { class, .. }) if class.as_str() == "huge"
     ));
     assert!(matches!(
-        template().job(&fields("build"), &[service("redis")]),
+        template().job(&fields("build"), &[service("redis")]).await,
         Err(TemplateError::NoService { service }) if service.as_str() == "redis"
     ));
 }

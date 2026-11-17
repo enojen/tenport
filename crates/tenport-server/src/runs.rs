@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use sqlx::SqliteConnection;
 use time::OffsetDateTime;
+use tokio::sync::Mutex;
 
 use crate::accounts::{Email, UserId};
 use futures::future::try_join_all;
@@ -90,22 +91,29 @@ pub struct NewRun {
 }
 
 pub struct Runs {
-    pub cluster: Arc<dyn Cluster>,
-    pub template: RunTemplate,
-    pub box_image: String,
+    cluster: Arc<dyn Cluster>,
+    template: RunTemplate,
+    box_image: String,
+    start_lock: Mutex<()>,
 }
 
 impl Runs {
+    pub fn new(cluster: Arc<dyn Cluster>, template: RunTemplate, box_image: String) -> Self {
+        Self {
+            cluster,
+            template,
+            box_image,
+            start_lock: Mutex::new(()),
+        }
+    }
+
     pub async fn start(&self, db: &Db, user: &UserId, new: NewRun) -> Result<Run, RunsError> {
         let project = projects::find_project_for_member(db, user, &new.project)
             .await?
             .ok_or_else(|| RunsError::NotMember {
                 project: new.project.clone(),
             })?;
-        self.require_idle(&project, &new.task).await?;
-        let fields = self.fields(&project, &new, OffsetDateTime::now_utc());
-        let job = self.template.job(&fields, &new.services)?;
-        let name = RunName::from(self.cluster.create_job(job).await?);
+        let name = self.create_job_when_idle(&project, &new).await?;
         let started = RunStarted {
             project: project.id.clone(),
             task: new.task.clone(),
@@ -116,6 +124,18 @@ impl Runs {
         let event = Event::Runs(RunsEvent::RunStarted(started));
         events::append(db, Actor::User(user.clone()), event).await?;
         find_run(db, &name).await
+    }
+
+    async fn create_job_when_idle(
+        &self,
+        project: &Project,
+        new: &NewRun,
+    ) -> Result<RunName, RunsError> {
+        let _one_start_at_a_time = self.start_lock.lock().await;
+        self.require_idle(project, &new.task).await?;
+        let fields = self.fields(project, new, OffsetDateTime::now_utc());
+        let job = self.template.job(&fields, &new.services).await?;
+        Ok(RunName::from(self.cluster.create_job(job).await?))
     }
 
     pub async fn list_of_task(

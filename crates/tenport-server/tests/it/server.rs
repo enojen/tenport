@@ -66,12 +66,9 @@ impl TestServer {
 
 fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
     let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    Runs {
-        cluster,
-        template: RunTemplate {
-            dir: tests.join("run-template"),
-            services_dir: tests.join("run-services"),
-        },
-        box_image: "box:1".to_owned(),
-    }
+    let template = RunTemplate {
+        dir: tests.join("run-template"),
+        services_dir: tests.join("run-services"),
+    };
+    Runs::new(cluster, template, "box:1".to_owned())
 }
