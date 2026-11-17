@@ -55,7 +55,7 @@ impl KubeCluster {
         Ok(newest_pod(list.items).as_ref().and_then(pod_state))
     }
 
-    async fn log(&self, pod: &PodName, read: LogRead) -> Result<LogReader, ClusterError> {
+    async fn open_log(&self, pod: &PodName, read: LogRead) -> Result<LogReader, ClusterError> {
         let params = LogParams {
             container: Some(BOX_CONTAINER.to_owned()),
             follow: read.follow,
@@ -108,7 +108,7 @@ impl Cluster for KubeCluster {
         pod: &'a PodName,
         read: LogRead,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>> {
-        self.log(pod, read).boxed()
+        self.open_log(pod, read).boxed()
     }
 
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {
@@ -125,7 +125,7 @@ fn status_code(error: &kube::Error) -> Option<u16> {
 
 fn job_state(job: &Job) -> Option<JobState> {
     let name = JobName::new(job.metadata.name.clone()?);
-    let created = to_offset(job.metadata.creation_timestamp.as_ref()?.0)?;
+    let created = to_offset_date_time(job.metadata.creation_timestamp.as_ref()?.0)?;
     Some(JobState {
         name,
         labels: job.metadata.labels.clone().unwrap_or_default(),
@@ -145,7 +145,7 @@ fn job_phase(job: &Job) -> JobPhase {
     JobPhase::Running
 }
 
-fn to_offset(timestamp: k8s_openapi::jiff::Timestamp) -> Option<OffsetDateTime> {
+fn to_offset_date_time(timestamp: k8s_openapi::jiff::Timestamp) -> Option<OffsetDateTime> {
     OffsetDateTime::from_unix_timestamp_nanos(timestamp.as_nanosecond()).ok()
 }
 

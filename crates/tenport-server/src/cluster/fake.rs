@@ -92,7 +92,7 @@ impl FakeCluster {
             .map(|pod| pod.state.clone())
     }
 
-    fn log(&self, pod: &PodName) -> Result<LogReader, ClusterError> {
+    fn open_log(&self, pod: &PodName) -> Result<LogReader, ClusterError> {
         let jobs = self.lock();
         let found = jobs
             .values()
@@ -134,7 +134,7 @@ impl Cluster for FakeCluster {
         pod: &'a PodName,
         _read: LogRead,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>> {
-        ready(self.log(pod)).boxed()
+        ready(self.open_log(pod)).boxed()
     }
 
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {
