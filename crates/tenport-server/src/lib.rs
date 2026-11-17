@@ -1,5 +1,6 @@
 pub mod accounts;
 mod agents;
+pub mod archives;
 pub mod cluster;
 pub mod command;
 pub mod config;

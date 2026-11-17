@@ -2,6 +2,7 @@ use std::path::Path;
 
 use super::*;
 use crate::accounts::Role;
+use crate::archives::ArchiveBucket;
 use crate::fixtures::{project_of, register};
 use std::time::Duration;
 
@@ -19,7 +20,7 @@ fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
         dir: tests.join("run-template"),
         services_dir: tests.join("run-services"),
     };
-    Runs::new(cluster, template, "box:1".to_owned())
+    Runs::new(cluster, template, "box:1".to_owned(), test_bucket())
 }
 
 fn build(project: &ProjectId) -> NewRun {
@@ -117,4 +118,14 @@ async fn only_a_member_of_the_projects_organization_starts_a_run() {
 fn the_run_stamp_is_month_day_and_time_in_utc() {
     let at = OffsetDateTime::from_unix_timestamp(1_794_906_303).unwrap();
     assert_eq!(run_stamp(at), "1117-090503");
+}
+
+fn test_bucket() -> ArchiveBucket {
+    ArchiveBucket::new(
+        "https://objects.example.test/tenbox-test",
+        "hel1",
+        "key-id".to_owned(),
+        "key-secret".to_owned(),
+    )
+    .unwrap()
 }

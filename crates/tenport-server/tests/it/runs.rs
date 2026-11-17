@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use k8s_openapi::api::batch::v1::Job;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tenport_server::accounts::{Role, Token};
@@ -70,6 +71,34 @@ async fn a_member_starts_a_run_and_tenport_creates_its_job() {
     let jobs = server.cluster.jobs();
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].metadata.name.as_deref(), run["name"].as_str());
+}
+
+fn box_env(job: &Job, name: &str) -> String {
+    let spec = job.spec.as_ref().unwrap().template.spec.as_ref().unwrap();
+    let container = spec.containers.iter().find(|c| c.name == "box").unwrap();
+    let env = container.env.as_ref().unwrap();
+    let var = env.iter().find(|var| var.name == name).unwrap();
+    var.value.clone().unwrap_or_default()
+}
+
+#[tokio::test]
+async fn the_job_of_a_run_gets_a_get_and_a_put_url_for_the_task_archive() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let project = project_of(&server, &token).await;
+
+    let response = post_run(&server, &token, &build(&project)).await;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let job = &server.cluster.jobs()[0];
+    let get = box_env(job, "TENBOX_ARCHIVE_GET");
+    let put = box_env(job, "TENBOX_ARCHIVE_PUT");
+    let object =
+        format!("https://objects.example.test/tenbox-test/tasks/{project}/TEN-301.tar.zst?");
+    assert!(get.starts_with(&object), "{get}");
+    assert!(put.starts_with(&object), "{put}");
+    assert!(get.contains("X-Amz-Expires=86400"), "{get}");
+    assert_ne!(get, put);
 }
 
 #[tokio::test]

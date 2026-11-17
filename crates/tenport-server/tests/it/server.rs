@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use tempfile::TempDir;
 use tenport_server::accounts::{self, GithubLogin, NewUser, Registration, Role, Token};
+use tenport_server::archives::ArchiveBucket;
 use tenport_server::cluster::FakeCluster;
 use tenport_server::db::{self, Db};
 use tenport_server::events::Actor;
@@ -80,5 +81,15 @@ fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
         dir: tests.join("run-template"),
         services_dir: tests.join("run-services"),
     };
-    Runs::new(cluster, template, "box:1".to_owned())
+    Runs::new(cluster, template, "box:1".to_owned(), test_bucket())
+}
+
+fn test_bucket() -> ArchiveBucket {
+    ArchiveBucket::new(
+        "https://objects.example.test/tenbox-test",
+        "hel1",
+        "key-id".to_owned(),
+        "key-secret".to_owned(),
+    )
+    .unwrap()
 }

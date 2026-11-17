@@ -269,7 +269,7 @@ What the tenbox server and the CLI do, and where Tenport is:
 | `POST /events`: takes the task events; an id that comes twice is stored once | Done; the CLI sends `task.started` and `task.closed` |
 | The CLI starts, follows, stops and deletes the Jobs with a kubeconfig | Steps 3 and 6 |
 | The CLI writes the Secret `project-<project id>` before each Job | Step 4: `PUT /projects/{project}/secrets/{name}`; the CLI stops in step 6 |
-| The CLI makes the presigned links of the bucket archive, with the bucket keys on the computer | Step 4 |
+| The CLI makes the presigned links of the bucket archive, with the bucket keys on the computer | Step 4: Tenport makes them for its own Jobs; the CLI stops in step 6 |
 | `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Step 4 |
 | A placeholder Secret for each new Job | Step 4 |
 | `run.finished` when a box container ends, with the OOM count and the close output from the pod log | Step 5 |
@@ -320,7 +320,12 @@ The steps, in order:
      gives each `name` and when it `changed`, never a value. A name is `tracker_api_key` or
      `ntfy_url`, the keys the Job template reads. Their events are `project.secret_changed` and
      `project.secret_deleted`, with the name only. Until step 6 the CLI still writes the whole
-     Secret before each of its Jobs, with the values of the computer.
+     Secret before each of its Jobs, with the values of the computer. Done: tenport #31.
+   - The bucket archive: Tenport reads the bucket from `TENPORT_BUCKET` (a URL whose path is the
+     bucket name), `TENPORT_BUCKET_REGION`, `TENPORT_BUCKET_KEY_FILE` and
+     `TENPORT_BUCKET_SECRET_FILE`, and does not serve without them. Each Job gets a GET and a PUT
+     link to `tasks/<project id>/<task>.tar.zst`, good for 24 hours, the same object and the
+     same time as the CLI's; a Job ends after 8 hours at most.
    - Deleting a task: `DELETE /tasks/{task}?project=<id>`, with the event `task.deleted`.
    - Tenport's Jobs send their placeholders to an injector of their own, which asks Tenport;
      the injector of the tenbox server stays as it is until step 11.
