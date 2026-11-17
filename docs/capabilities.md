@@ -162,7 +162,7 @@ When a step fails again and again, the babysitter stops and asks the user (`ques
 | The box never sees the real token. It gets a placeholder, and the injector asks Tenport for the real token while the Job is open (`POST /run-credentials`). This route opens nothing else | Today |
 | The placeholder is made from the Job's uid with a key. A changed key breaks the runs that are open at that time | Today |
 | Tenport reads the boot log of each ended pod and stores it as a `job.finished` event. It lists the runs of a task | Today |
-| The tracker key of a project goes to a Secret before each Job. Today the CLI writes it; Tenport will write it, because Tenport holds the key | Proposed |
+| The tracker key of a project goes to a Secret. Today the CLI writes it before each Job; Tenport will write it when an admin changes it, and keep no copy (section 9) | Decided |
 | The claude.ai login of the boxes is copied from the computer to a Secret. Tenport's Claude subscriptions replace this copy | Proposed |
 
 ## 6. Events, costs and notices
@@ -227,46 +227,79 @@ Rules from the panel's RAM measurements (2026-11-15). Low browser RAM is the use
 - The git and worktree work, the checks and the PR: the CLI does them where the code is.
 - The plan, build and close workflows and the skills: they stay with the agents. They write their
   state to Tenport instead of to local files.
-- The cluster's manifests and Secrets: they stay in the `tenyard` repository.
+- The cluster's manifests and its own Secrets: they stay in the `tenyard` repository. The
+  project Secrets are the exception: Tenport writes them (section 9).
 
 ## 9. The move from the tenbox server
 
-Tenport takes over every job of the tenbox server, one PR at a time. When the cluster runs Tenport
-in its place, `server/` and the parts that only it uses are deleted from tenbox. The live server
-runs the image of tenbox commit `71dbd66`; no commit after it changes the server.
+Tenport takes over every job of the tenbox server, and every talk with the cluster, one PR at a
+time. In the end only Tenport talks to Kubernetes: the CLI on a computer and the agent in a box
+send their requests to Tenport, and a computer keeps only `TENPORT_URL` and `TENPORT_TOKEN`; no
+kubeconfig, no bucket keys, no project Secrets. Then `server/` and the CLI's Kubernetes code are
+deleted from tenbox. The live server runs the image of tenbox commit `71dbd66`; no commit after it
+changes the server.
 
-What the tenbox server does, and where Tenport is:
+Decided (2026-11-17):
 
-| The tenbox server | Tenport |
+- Tenport starts the Jobs. `task/job.yaml` stays in tenyard; Flux gives it to Tenport as a
+  ConfigMap. Tenport's ServiceAccount may create, read and delete Jobs and Secrets in the
+  `tenbox` namespace only.
+- Tenport talks to the cluster with the `kube` crate, behind one trait with a fake for tests.
+  It lists the cluster on a timer and turns each change into an event; no watch streams.
+- A project Secret (the tracker key, the ntfy URL) goes from the admin's CLI to Tenport, and
+  Tenport writes it to the Secret `project-<project id>`. Tenport keeps no copy: not in its
+  database, not in a log. The API only writes a Secret and never gives it back; it tells only
+  that it is there and when it changed. Only an organization admin may write one. k3s gets
+  `secrets-encryption`, so the Secrets are encrypted on disk.
+- While both servers run, Tenport's Jobs have their own label and their template sends the
+  injector to Tenport, so the tenbox server never touches them.
+- Tenport is open on the tailnet only, like Grafana. A public domain waits for more users.
+- The task home is a bucket archive, no longer a volume (tenbox #313). The old volumes move to
+  the bucket outside this plan, so Tenport does not watch volumes.
+
+What the tenbox server and the CLI do, and where Tenport is:
+
+| Today | Tenport |
 |---|---|
 | `GET /health`, `GET /openapi.json` | Done |
 | Users, organizations, memberships (`admin` or `member`), tokens; each request needs a user token | Done |
 | `project add` command: a repository joins an organization as a project | Done as `POST /projects` and `GET /projects` |
-| `POST /events`: takes the task events; an id that comes twice is stored once. The tenbox CLI never sends them: only the route exists | Step 1 |
-| `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Step 2 |
-| A placeholder Secret for each new Job | Step 2 |
-| `job.finished` when a box container ends, with the OOM count and the close output from the pod log | Step 2 |
-| `GET /tasks/{task}/runs`: the runs of a task | Step 2 |
-| Nodes, every 30 seconds: a worker that comes or goes, with its Hetzner type and hourly price | Step 3 |
-| Task volumes, every 30 seconds: opened and deleted, with their price. A closed task's volume is deleted after the grace period; an idle open volume sends a notice to ntfy | Step 3 |
-| `GET /costs?from&to`: what the workers and the volumes cost, with each task's share; organization admins only | Step 4 |
-| `costs --from --to` command: the same report from a read-only database | Step 4 |
-| `GET /metrics`: the hourly price of each worker and task volume that is up, for Prometheus | Step 4 |
-| `user add` command: a new user; the token shows once, in its output | Step 5 |
-| `backup --to <file>` command: a copy of the database. A CronJob runs it each day at 03:00 and keeps 7 days | Step 5 |
-| `GET /docs`: the Swagger page | Step 5 |
+| `POST /events`: takes the task events; an id that comes twice is stored once | Done; the CLI sends `task.started` and `task.closed` |
+| The CLI starts, follows, stops and deletes the Jobs with a kubeconfig | Steps 3 and 6 |
+| The CLI writes the project Secret before each Job | Step 4 |
+| The CLI makes the presigned links of the bucket archive, with the bucket keys on the computer | Step 4 |
+| `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Step 4 |
+| A placeholder Secret for each new Job | Step 4 |
+| `job.finished` when a box container ends, with the OOM count and the close output from the pod log | Step 5 |
+| `GET /tasks/{task}/runs`: the runs of a task | Step 5 |
+| Nodes, every 30 seconds: a worker that comes or goes, with its Hetzner type and hourly price | Step 8 |
+| Task volumes: their price, the deletion after the grace period and the ntfy notice | Not moved: no task volumes |
+| `GET /costs?from&to`, the `costs` command and `GET /metrics` | Step 9 |
+| `user add` command: a new user; the token shows once, in its output | Step 2 |
+| `backup --to <file>` command: a copy of the database. A CronJob runs it each day at 03:00 and keeps 7 days | Step 10 |
+| `GET /docs`: the Swagger page | Step 10 |
 
 The steps, in order:
 
-1. `POST /events`, and the CLI sends its events to it.
-2. Runs: `/run-credentials` with the injector token, the placeholder Secrets, `job.finished` and
-   `GET /tasks/{task}/runs`.
-3. The cluster watches: nodes, volumes, the volume deletion and the ntfy notice.
-4. Costs: `GET /costs`, the `costs` command and `GET /metrics`.
-5. The `user add` and `backup` commands and `/docs`.
-6. The move: copy the tenbox data into Tenport, build Tenport's image, and put it in place of
-   the tenbox server in tenyard's manifests.
-7. Delete `server/` and the parts that only it uses from tenbox.
+1. `POST /events`, and the CLI sends its events to it. Done.
+2. Tenport in the cluster, next to the tenbox server: its image, its ServiceAccount and Role,
+   and a Tailscale node, in tenyard's manifests. It answers `/health` on the tailnet. The
+   `user add` command comes here, so the first admin can be made in the pod.
+3. Tenport starts the Jobs: `POST /runs` to start one, its state and log, stop, and delete a
+   task. The template comes from the ConfigMap.
+4. What a run needs comes from Tenport: the project Secrets, the presigned links of the bucket
+   archive (the bucket keys in Tenport's env), the GitHub App token, the placeholder Secret and
+   `POST /run-credentials`.
+5. The runs: `job.finished` and `GET /tasks/{task}/runs`.
+6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/rm/ls` go to
+   Tenport. The kubeconfig and the bucket key file leave the computer.
+7. The agent in a box reaches Tenport from inside the cluster with a run token that starts runs
+   in its own project only, with a limit on nested runs and on open runs at one time.
+8. The cluster watch: nodes, with their Hetzner type and price.
+9. Costs: `GET /costs`, the `costs` command and `GET /metrics`, with the workers and the bucket.
+10. The `backup` command and `/docs`.
+11. The tenbox server stops: copy its data into Tenport, then delete `server/` and the CLI's
+    Kubernetes code from tenbox.
 
 ## Open questions
 
