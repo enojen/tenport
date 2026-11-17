@@ -13,7 +13,7 @@ use sqlx::SqliteConnection;
 use time::OffsetDateTime;
 
 use crate::accounts::{Email, UserId};
-use crate::cluster::{Cluster, ClusterError, JobPhase};
+use crate::cluster::{Cluster, ClusterError, JobName, JobPhase, JobState, LogRead, LogReader};
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
 use crate::name::Name;
@@ -22,8 +22,8 @@ use crate::tasks::TaskId;
 
 pub use command::{Command, CommandError, CommandName, command_rules};
 pub use model::{
-    Branch, BranchError, ClassName, ClassNameError, RunName, RunStarted, RunsEvent, ServiceName,
-    ServiceNameError,
+    Branch, BranchError, ClassName, ClassNameError, RunName, RunPhase, RunStarted, RunState,
+    RunsEvent, ServiceName, ServiceNameError, StoredRun,
 };
 pub use template::{RunTemplate, TemplateError};
 
@@ -33,8 +33,17 @@ const GITHUB: &str = "https://github.com";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunsError {
-    #[error("only a member of the organization of the project {project} starts its runs")]
+    #[error("only a member of the organization of the project {project} sees and starts its runs")]
     NotMember { project: ProjectId },
+    #[error("Tenport does not know the run {run}")]
+    NotFound { run: RunName },
+    #[error("the box container of the run {run} has not started{}", reason_text(.reason))]
+    NotStarted {
+        run: RunName,
+        reason: Option<String>,
+    },
+    #[error("the run {run} has no log: its Job is gone")]
+    JobGone { run: RunName },
     #[error("task {task} still runs on the cluster: {}; wait until it ends", jobs.join(", "))]
     Busy { task: TaskId, jobs: Vec<String> },
     #[error(transparent)]
@@ -45,6 +54,15 @@ pub enum RunsError {
     Projects(#[from] ProjectsError),
     #[error(transparent)]
     Events(#[from] EventsError),
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+}
+
+fn reason_text(reason: &Option<String>) -> String {
+    reason
+        .as_ref()
+        .map(|reason| format!(": {reason}"))
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,9 +124,109 @@ impl Runs {
         })
     }
 
+    pub async fn list_of_task(
+        &self,
+        db: &Db,
+        user: &UserId,
+        project: &ProjectId,
+        task: &TaskId,
+    ) -> Result<Vec<RunState>, RunsError> {
+        require_member(db, user, project).await?;
+        let stored = store::list_runs_of_task(&mut *db.acquire().await?, project, task).await?;
+        let jobs = self.jobs_of_task(project, task).await?;
+        let mut states = Vec::with_capacity(stored.len());
+        for run in stored {
+            let job = jobs
+                .iter()
+                .find(|job| job.name.as_str() == run.name.as_str());
+            states.push(self.state(run, job).await?);
+        }
+        Ok(states)
+    }
+
+    pub async fn find(
+        &self,
+        db: &Db,
+        user: &UserId,
+        name: &RunName,
+    ) -> Result<RunState, RunsError> {
+        let run = find_for_member(db, user, name).await?;
+        let job = self.job_of(&run).await?;
+        self.state(run, job.as_ref()).await
+    }
+
+    pub async fn open_log(
+        &self,
+        db: &Db,
+        user: &UserId,
+        name: &RunName,
+        follow: bool,
+    ) -> Result<LogReader, RunsError> {
+        let run = find_for_member(db, user, name).await?;
+        let job = JobName::new(run.name.as_str());
+        let pod = self.cluster.find_pod(&job).await?;
+        let pod = pod.ok_or_else(|| RunsError::NotStarted {
+            run: run.name.clone(),
+            reason: None,
+        })?;
+        if !pod.started {
+            return Err(RunsError::NotStarted {
+                run: run.name,
+                reason: pod.reason,
+            });
+        }
+        let read = LogRead {
+            follow,
+            tail_lines: None,
+        };
+        match self.cluster.read_log(&pod.name, read).await {
+            Err(ClusterError::NoPod(_)) => Err(RunsError::JobGone { run: run.name }),
+            other => Ok(other?),
+        }
+    }
+
+    pub async fn stop(&self, db: &Db, user: &UserId, name: &RunName) -> Result<(), RunsError> {
+        let run = find_for_member(db, user, name).await?;
+        self.cluster
+            .delete_job(&JobName::new(run.name.as_str()))
+            .await?;
+        Ok(())
+    }
+
+    async fn state(&self, run: StoredRun, job: Option<&JobState>) -> Result<RunState, RunsError> {
+        let Some(job) = job else {
+            return Ok(RunState {
+                run,
+                phase: RunPhase::Unknown,
+                reason: None,
+            });
+        };
+        let pod = self.cluster.find_pod(&job.name).await?;
+        Ok(RunState {
+            run,
+            phase: job.phase.into(),
+            reason: pod.and_then(|pod| pod.reason),
+        })
+    }
+
+    async fn job_of(&self, run: &StoredRun) -> Result<Option<JobState>, RunsError> {
+        let jobs = self.jobs_of_task(&run.project, &run.task).await?;
+        Ok(jobs
+            .into_iter()
+            .find(|job| job.name.as_str() == run.name.as_str()))
+    }
+
+    async fn jobs_of_task(
+        &self,
+        project: &ProjectId,
+        task: &TaskId,
+    ) -> Result<Vec<JobState>, RunsError> {
+        let selector = format!("project-id={project},task={task}");
+        Ok(self.cluster.list_jobs(&selector).await?)
+    }
+
     async fn require_idle(&self, project: &Project, task: &TaskId) -> Result<(), RunsError> {
-        let selector = format!("project-id={},task={task}", project.id);
-        let jobs = self.cluster.list_jobs(&selector).await?;
+        let jobs = self.jobs_of_task(&project.id, task).await?;
         let running: Vec<String> = jobs
             .into_iter()
             .filter(|job| job.phase == JobPhase::Running)
@@ -147,6 +265,24 @@ impl Runs {
             setup: new.setup.clone(),
         }
     }
+}
+
+async fn require_member(db: &Db, user: &UserId, project: &ProjectId) -> Result<(), RunsError> {
+    if projects::is_member(db, user, project).await? {
+        Ok(())
+    } else {
+        Err(RunsError::NotMember {
+            project: project.clone(),
+        })
+    }
+}
+
+async fn find_for_member(db: &Db, user: &UserId, name: &RunName) -> Result<StoredRun, RunsError> {
+    let run = store::find_run(&mut *db.acquire().await?, name)
+        .await?
+        .ok_or_else(|| RunsError::NotFound { run: name.clone() })?;
+    require_member(db, user, &run.project).await?;
+    Ok(run)
 }
 
 fn kube_name(task: &TaskId) -> String {

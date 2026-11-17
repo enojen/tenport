@@ -1,7 +1,7 @@
 use std::error::Error as StdError;
 
 use axum::Json;
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{JsonRejection, QueryRejection};
 use axum::http::{Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
@@ -21,6 +21,8 @@ pub enum HttpError {
     DatabaseDown(#[source] sqlx::Error),
     #[error("{0}")]
     BadRequest(String),
+    #[error("{0}")]
+    NotFound(String),
     #[error("a valid bearer token is needed")]
     Unauthorized,
     #[error("{0}")]
@@ -40,7 +42,7 @@ impl HttpError {
 
     fn status(&self) -> StatusCode {
         match self {
-            Self::NoRoute { .. } => StatusCode::NOT_FOUND,
+            Self::NoRoute { .. } | Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::DatabaseDown(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
@@ -52,7 +54,7 @@ impl HttpError {
 
     fn code(&self) -> &'static str {
         match self {
-            Self::NoRoute { .. } => "not-found",
+            Self::NoRoute { .. } | Self::NotFound(_) => "not-found",
             Self::DatabaseDown(_) => "database-down",
             Self::BadRequest(_) => "bad-request",
             Self::Unauthorized => "unauthorized",
@@ -61,6 +63,12 @@ impl HttpError {
             Self::MachineBusy(_) => "machine-busy",
             Self::Internal(_) => "internal",
         }
+    }
+}
+
+impl From<QueryRejection> for HttpError {
+    fn from(rejection: QueryRejection) -> Self {
+        Self::BadRequest(rejection.body_text())
     }
 }
 

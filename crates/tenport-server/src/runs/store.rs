@@ -1,7 +1,9 @@
 use sqlx::SqliteConnection;
 
-use super::model::RunStarted;
+use super::model::{RunName, RunStarted, StoredRun};
 use crate::events::Stamp;
+use crate::projects::ProjectId;
+use crate::tasks::TaskId;
 
 pub async fn insert_run(
     conn: &mut SqliteConnection,
@@ -23,6 +25,38 @@ pub async fn insert_run(
     .execute(conn)
     .await?;
     Ok(())
+}
+
+pub async fn find_run(
+    conn: &mut SqliteConnection,
+    name: &RunName,
+) -> Result<Option<StoredRun>, sqlx::Error> {
+    sqlx::query_as!(
+        StoredRun,
+        r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
+                  command as "command: _", class as "class: _", created_at as "created: _"
+           from runs where name = ?"#,
+        name,
+    )
+    .fetch_optional(conn)
+    .await
+}
+
+pub async fn list_runs_of_task(
+    conn: &mut SqliteConnection,
+    project: &ProjectId,
+    task: &TaskId,
+) -> Result<Vec<StoredRun>, sqlx::Error> {
+    sqlx::query_as!(
+        StoredRun,
+        r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
+                  command as "command: _", class as "class: _", created_at as "created: _"
+           from runs where project_id = ? and task_id = ? order by created_at, name"#,
+        project,
+        task,
+    )
+    .fetch_all(conn)
+    .await
 }
 
 #[cfg(test)]

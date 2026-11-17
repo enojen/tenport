@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
+use utoipa::ToSchema;
 
-use crate::cluster::JobName;
+use crate::cluster::{JobName, JobPhase};
 use crate::name::parsed_text;
 use crate::projects::ProjectId;
 use crate::tasks::TaskId;
@@ -134,4 +136,39 @@ pub struct RunStarted {
     pub run: RunName,
     pub command: CommandName,
     pub class: ClassName,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredRun {
+    pub name: RunName,
+    pub project: ProjectId,
+    pub task: TaskId,
+    pub command: CommandName,
+    pub class: ClassName,
+    pub created: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+pub enum RunPhase {
+    Running,
+    Succeeded,
+    Failed,
+    Unknown,
+}
+
+impl From<JobPhase> for RunPhase {
+    fn from(phase: JobPhase) -> Self {
+        match phase {
+            JobPhase::Running => Self::Running,
+            JobPhase::Succeeded => Self::Succeeded,
+            JobPhase::Failed => Self::Failed,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunState {
+    pub run: StoredRun,
+    pub phase: RunPhase,
+    pub reason: Option<String>,
 }

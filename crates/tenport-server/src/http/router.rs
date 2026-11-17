@@ -17,7 +17,9 @@ pub fn router(state: AppState) -> Router {
         .routes(routes!(accounts::me))
         .routes(routes!(projects::add_project, projects::list_projects))
         .routes(routes!(events::record_events))
-        .routes(routes!(runs::start_run))
+        .routes(routes!(runs::start_run, runs::list_runs))
+        .routes(routes!(runs::find_run, runs::stop_run))
+        .routes(routes!(runs::read_log))
         .split_for_parts();
     router
         .route(
