@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "insert into project_secrets (project_id, secret, changed_at, changed_by)\n         values (?, ?, ?, ?)\n         on conflict (project_id, secret)\n         do update set changed_at = excluded.changed_at, changed_by = excluded.changed_by",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "cfd9610ccd2fc6b54deff8d414e5ddaad70a621f8b6d37a0df1d9a9f9bffaca4"
+}

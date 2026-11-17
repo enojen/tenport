@@ -91,3 +91,18 @@ fn a_repo_is_owner_and_name() {
         assert_eq!(Repo::parse(bad), Err(RepoError), "{bad:?}");
     }
 }
+
+#[test]
+fn a_secret_value_is_never_empty_and_never_printed() {
+    assert!(SecretValue::parse("").is_err());
+    assert!(SecretValue::parse(&"x".repeat(4097)).is_err());
+    let value = SecretValue::parse("lin_api_not_a_real_key").unwrap();
+    assert_eq!(value.expose(), "lin_api_not_a_real_key");
+    assert!(!format!("{value:?}").contains("lin_api"));
+}
+
+#[test]
+fn the_secret_of_a_project_is_named_after_its_id() {
+    let project = ProjectId::parse("abc123").unwrap();
+    assert_eq!(kube_secret_of(&project).as_str(), "project-abc123");
+}

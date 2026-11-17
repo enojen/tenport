@@ -16,6 +16,7 @@ mod sse;
 
 use std::sync::Arc;
 
+use crate::cluster::Cluster;
 use crate::db::Db;
 use crate::runs::Runs;
 
@@ -25,6 +26,7 @@ pub use router::router;
 #[derive(Clone)]
 pub struct AppState {
     pub db: Db,
+    pub cluster: Arc<dyn Cluster>,
     pub runs: Arc<Runs>,
     pub limiter: Arc<Limiter>,
 }

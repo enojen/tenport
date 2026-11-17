@@ -5,12 +5,15 @@ use utoipa::ToSchema;
 
 use super::AppState;
 use super::auth::CurrentUser;
-use super::error::{HttpError, PROBLEM_JSON, Problem, TooManyRequests, Unauthorized, Unavailable};
-use super::extract::{Json, Query};
+use super::error::{
+    HttpError, NotMember, PROBLEM_JSON, Problem, TooManyRequests, Unauthorized, Unavailable,
+};
+use super::extract::{Json, Path, Query};
 use super::page::{Page, PageQuery, Paged};
 use crate::accounts::OrgId;
 use crate::name::Name;
-use crate::projects::{self, ProjectId, Repo};
+use crate::projects::{self, ProjectId, ProjectSecret, Repo, SecretState, SecretValue};
+use time::OffsetDateTime;
 
 #[derive(Deserialize, ToSchema)]
 pub struct NewProject {
@@ -98,4 +101,107 @@ impl From<projects::Project> for Project {
             repo: project.repo.into(),
         }
     }
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct NewSecretValue {
+    #[schema(value_type = String, min_length = 1, max_length = 4096)]
+    value: SecretValue,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct Secret {
+    name: ProjectSecret,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    changed: OffsetDateTime,
+}
+
+impl From<SecretState> for Secret {
+    fn from(state: SecretState) -> Self {
+        Self {
+            name: state.secret,
+            changed: state.changed,
+        }
+    }
+}
+
+#[utoipa::path(
+    put,
+    path = "/projects/{project}/secrets/{name}",
+    security(("bearer" = [])),
+    params(
+        ("project" = String, Path, description = "The id of the project"),
+        ("name" = ProjectSecret, Path, description = "The name of the secret"),
+    ),
+    request_body = NewSecretValue,
+    responses(
+        (status = OK, description = "The secret is written to the Secret project-<project id>; Tenport keeps no copy and gives back only its name", body = Secret),
+        (status = BAD_REQUEST, description = "A name Tenport does not know, or a value that is empty or too long", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
+        (status = FORBIDDEN, description = "The user is not an admin of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+    ),
+)]
+pub async fn write_secret(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((project, name)): Path<(ProjectId, ProjectSecret)>,
+    Json(body): Json<NewSecretValue>,
+) -> Result<Json<Secret>, HttpError> {
+    let cluster = state.cluster.as_ref();
+    let written =
+        projects::write_secret(&state.db, cluster, &user.id, &project, name, &body.value).await?;
+    Ok(Json(written.into()))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/projects/{project}/secrets/{name}",
+    security(("bearer" = [])),
+    params(
+        ("project" = String, Path, description = "The id of the project"),
+        ("name" = ProjectSecret, Path, description = "The name of the secret"),
+    ),
+    responses(
+        (status = NO_CONTENT, description = "The secret is deleted from the Secret project-<project id>"),
+        (status = BAD_REQUEST, description = "A name Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
+        (status = FORBIDDEN, description = "The user is not an admin of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = NOT_FOUND, description = "The project has no such secret", body = Problem, content_type = PROBLEM_JSON),
+    ),
+)]
+pub async fn delete_secret(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((project, name)): Path<(ProjectId, ProjectSecret)>,
+) -> Result<StatusCode, HttpError> {
+    let cluster = state.cluster.as_ref();
+    projects::delete_secret(&state.db, cluster, &user.id, &project, name).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get,
+    path = "/projects/{project}/secrets",
+    security(("bearer" = [])),
+    params(("project" = String, Path, description = "The id of the project")),
+    responses(
+        (status = OK, description = "The secrets that Tenport wrote for the project, by name: never their values", body = Vec<Secret>),
+        (status = UNAUTHORIZED, response = Unauthorized),
+        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
+        (status = SERVICE_UNAVAILABLE, response = Unavailable),
+        (status = FORBIDDEN, response = NotMember),
+    ),
+)]
+pub async fn list_secrets(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(project): Path<ProjectId>,
+) -> Result<Json<Vec<Secret>>, HttpError> {
+    let found = projects::list_secrets(&state.db, &user.id, &project).await?;
+    Ok(Json(found.into_iter().map(Secret::from).collect()))
 }

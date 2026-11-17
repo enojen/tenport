@@ -12,12 +12,15 @@ use time::OffsetDateTime;
 
 use super::Cluster;
 use super::model::{
-    ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodName, PodState,
+    ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodName, PodState, SecretName,
 };
+
+type SecretData = BTreeMap<String, String>;
 
 #[derive(Default)]
 pub struct FakeCluster {
     jobs: Mutex<BTreeMap<JobName, FakeJob>>,
+    secrets: Mutex<BTreeMap<SecretName, SecretData>>,
     create_time: Duration,
 }
 
@@ -58,6 +61,29 @@ impl FakeCluster {
                 log: log.to_owned(),
             });
         }
+    }
+
+    pub fn secret(&self, name: &SecretName) -> Option<SecretData> {
+        self.lock_secrets().get(name).cloned()
+    }
+
+    fn lock_secrets(&self) -> std::sync::MutexGuard<'_, BTreeMap<SecretName, SecretData>> {
+        self.secrets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn write_key(&self, secret: &SecretName, key: &str, value: &str) {
+        self.lock_secrets()
+            .entry(secret.clone())
+            .or_default()
+            .insert(key.to_owned(), value.to_owned());
+    }
+
+    fn delete_key(&self, secret: &SecretName, key: &str) -> bool {
+        self.lock_secrets()
+            .get_mut(secret)
+            .is_some_and(|data| data.remove(key).is_some())
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<JobName, FakeJob>> {
@@ -155,6 +181,24 @@ impl Cluster for FakeCluster {
 
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {
         ready(Ok(self.delete(job))).boxed()
+    }
+
+    fn write_secret_key<'a>(
+        &'a self,
+        secret: &'a SecretName,
+        key: &'a str,
+        value: &'a str,
+    ) -> BoxFuture<'a, Result<(), ClusterError>> {
+        self.write_key(secret, key, value);
+        ready(Ok(())).boxed()
+    }
+
+    fn delete_secret_key<'a>(
+        &'a self,
+        secret: &'a SecretName,
+        key: &'a str,
+    ) -> BoxFuture<'a, Result<bool, ClusterError>> {
+        ready(Ok(self.delete_key(secret, key))).boxed()
     }
 }
 

@@ -20,6 +20,8 @@ pub fn router(state: AppState) -> Router {
         .routes(routes!(health::health))
         .routes(routes!(accounts::me))
         .routes(routes!(projects::add_project, projects::list_projects))
+        .routes(routes!(projects::write_secret, projects::delete_secret))
+        .routes(routes!(projects::list_secrets))
         .routes(routes!(events::record_events))
         .routes(routes!(runs::start_run, runs::list_runs))
         .routes(routes!(runs::find_run, runs::stop_run))

@@ -1,24 +1,31 @@
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use k8s_openapi::api::batch::v1::Job;
-use k8s_openapi::api::core::v1::{ContainerStatus, Pod};
-use kube::api::{DeleteParams, ListParams, LogParams, PostParams};
+use std::collections::BTreeMap;
+
+use k8s_openapi::api::core::v1::{ContainerStatus, Pod, Secret};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use kube::api::{DeleteParams, ListParams, LogParams, Patch, PatchParams, PostParams};
 use kube::{Api, Client};
+use serde_json::{Value, json};
 use time::OffsetDateTime;
 
 use super::Cluster;
 use super::model::{
-    ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodName, PodState,
+    ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodName, PodState, SecretName,
 };
 
 const BOX_CONTAINER: &str = "box";
 const CONFLICT: u16 = 409;
 const NOT_FOUND: u16 = 404;
 const PENDING: &str = "Pending";
+const FIELD_MANAGER: &str = "tenport";
+const OPAQUE: &str = "Opaque";
 
 pub struct KubeCluster {
     jobs: Api<Job>,
     pods: Api<Pod>,
+    secrets: Api<Secret>,
 }
 
 impl KubeCluster {
@@ -30,7 +37,8 @@ impl KubeCluster {
     pub fn new(client: Client, namespace: &str) -> Self {
         Self {
             jobs: Api::namespaced(client.clone(), namespace),
-            pods: Api::namespaced(client, namespace),
+            pods: Api::namespaced(client.clone(), namespace),
+            secrets: Api::namespaced(client, namespace),
         }
     }
 
@@ -82,6 +90,71 @@ impl KubeCluster {
             Err(error) => Err(ClusterError::Kube(error)),
         }
     }
+
+    async fn write_key(
+        &self,
+        secret: &SecretName,
+        key: &str,
+        value: &str,
+    ) -> Result<(), ClusterError> {
+        match self.patch_secret(secret, string_data(key, value)).await {
+            Err(ClusterError::Kube(error)) if status_code(&error) == Some(NOT_FOUND) => {
+                self.create_secret(secret, key, value).await
+            }
+            other => other,
+        }
+    }
+
+    async fn create_secret(
+        &self,
+        secret: &SecretName,
+        key: &str,
+        value: &str,
+    ) -> Result<(), ClusterError> {
+        let params = PostParams {
+            field_manager: Some(FIELD_MANAGER.to_owned()),
+            ..PostParams::default()
+        };
+        match self
+            .secrets
+            .create(&params, &new_secret(secret, key, value))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(error) if status_code(&error) == Some(CONFLICT) => {
+                self.patch_secret(secret, string_data(key, value)).await
+            }
+            Err(error) => Err(ClusterError::Kube(error)),
+        }
+    }
+
+    async fn delete_key(&self, secret: &SecretName, key: &str) -> Result<bool, ClusterError> {
+        let found = self
+            .secrets
+            .get_opt(secret.as_str())
+            .await
+            .map_err(ClusterError::Kube)?;
+        let has_key = found
+            .and_then(|secret| secret.data)
+            .is_some_and(|data| data.contains_key(key));
+        if has_key {
+            self.patch_secret(secret, json!({ "data": { key: null } }))
+                .await?;
+        }
+        Ok(has_key)
+    }
+
+    async fn patch_secret(&self, secret: &SecretName, patch: Value) -> Result<(), ClusterError> {
+        let params = PatchParams {
+            field_manager: Some(FIELD_MANAGER.to_owned()),
+            ..PatchParams::default()
+        };
+        self.secrets
+            .patch(secret.as_str(), &params, &Patch::Merge(patch))
+            .await
+            .map(|_| ())
+            .map_err(ClusterError::Kube)
+    }
 }
 
 impl Cluster for KubeCluster {
@@ -113,6 +186,39 @@ impl Cluster for KubeCluster {
 
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {
         self.delete(job).boxed()
+    }
+
+    fn write_secret_key<'a>(
+        &'a self,
+        secret: &'a SecretName,
+        key: &'a str,
+        value: &'a str,
+    ) -> BoxFuture<'a, Result<(), ClusterError>> {
+        self.write_key(secret, key, value).boxed()
+    }
+
+    fn delete_secret_key<'a>(
+        &'a self,
+        secret: &'a SecretName,
+        key: &'a str,
+    ) -> BoxFuture<'a, Result<bool, ClusterError>> {
+        self.delete_key(secret, key).boxed()
+    }
+}
+
+fn string_data(key: &str, value: &str) -> Value {
+    json!({ "stringData": { key: value } })
+}
+
+fn new_secret(secret: &SecretName, key: &str, value: &str) -> Secret {
+    Secret {
+        metadata: ObjectMeta {
+            name: Some(secret.as_str().to_owned()),
+            ..ObjectMeta::default()
+        },
+        type_: Some(OPAQUE.to_owned()),
+        string_data: Some(BTreeMap::from([(key.to_owned(), value.to_owned())])),
+        ..Secret::default()
     }
 }
 

@@ -3,7 +3,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use anyhow::Context;
-use tenport_server::cluster::KubeCluster;
+use tenport_server::cluster::{Cluster, KubeCluster};
 use tenport_server::command::{self, Command, USAGE};
 use tenport_server::config::Config;
 use tenport_server::http::{self, AppState, Limiter, Limits};
@@ -58,7 +58,8 @@ async fn serve() -> anyhow::Result<()> {
         dir: config.run_template,
         services_dir: config.run_services,
     };
-    let runs = Runs::new(Arc::new(cluster), template, config.box_image);
+    let cluster: Arc<dyn Cluster> = Arc::new(cluster);
+    let runs = Runs::new(cluster.clone(), template, config.box_image);
     let listener = TcpListener::bind(config.listen)
         .await
         .with_context(|| format!("cannot listen on {}", config.listen))?;
@@ -66,6 +67,7 @@ async fn serve() -> anyhow::Result<()> {
     tracing::info!(address = %config.listen, "listening");
     let state = AppState {
         db,
+        cluster,
         runs: Arc::new(runs),
         limiter: Arc::new(Limiter::new(Limits::default())),
     };
