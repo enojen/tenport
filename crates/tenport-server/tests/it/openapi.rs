@@ -61,3 +61,18 @@ async fn events_name_their_types() {
     );
     assert!(api["paths"]["/events"]["post"]["responses"]["409"].is_object());
 }
+
+#[tokio::test]
+async fn matches_the_committed_openapi_json() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/openapi.json");
+    let made = format!("{:#}\n", openapi().await);
+    if std::env::var_os("TENPORT_WRITE_OPENAPI").is_some() {
+        std::fs::write(path, &made).unwrap();
+    }
+    let committed = std::fs::read_to_string(path).unwrap_or_default();
+    assert!(
+        made == committed,
+        "the API differs from openapi.json: if the change is meant, run \
+         TENPORT_WRITE_OPENAPI=1 cargo test -p tenport-server --test it openapi and commit it"
+    );
+}

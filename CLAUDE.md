@@ -47,6 +47,19 @@ what it must do.
   transaction. Each topic has its own event enum (`AccountsEvent`) and its own `apply`; a table
   is written only there.
 
+## The API and its events
+
+- `crates/tenport-server/openapi.json` is the API as the server makes it. The test
+  `matches_the_committed_openapi_json` fails when they differ. After a change that is meant:
+  `TENPORT_WRITE_OPENAPI=1 cargo test -p tenport-server --test it openapi`, and commit the file.
+  tenbox keeps a copy and checks its events against it.
+- A change only adds: a new endpoint, a new event type, a new optional field. A field is never
+  renamed, removed, made required or given a new meaning: old clients still send it, and the
+  event log keeps it for good.
+- A new meaning is a new event type with a new name; the old type keeps its meaning.
+- The server goes first: a client sends a new event type only after a server that knows it is
+  deployed. Before that the server answers 400, and tenbox drops the event.
+
 ## Tests
 
 - Unit tests in `#[cfg(test)] mod tests;` with the body in `tests.rs` next to the module.
