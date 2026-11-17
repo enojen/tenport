@@ -1,6 +1,7 @@
 name: injector
 on:
   push:
+    branches: [main]
     paths: [crates/tenport-injector/**, Cargo.toml, Cargo.lock, .github/workflows/injector.yml]
   pull_request:
     paths: [crates/tenport-injector/**, Cargo.toml, Cargo.lock, .github/workflows/injector.yml]

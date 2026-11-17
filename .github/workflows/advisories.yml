@@ -1,6 +1,7 @@
 name: advisories
 on:
   push:
+    branches: [main]
     paths: [Cargo.lock, deny.toml, .github/workflows/advisories.yml]
   pull_request:
     paths: [Cargo.lock, deny.toml, .github/workflows/advisories.yml]

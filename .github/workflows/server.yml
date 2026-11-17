@@ -1,6 +1,7 @@
 name: server
 on:
   push:
+    branches: [main]
     paths: [crates/tenport-server/**, crates/tenport-run-credentials/**, .sqlx/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/server.yml]
   pull_request:
     paths: [crates/tenport-server/**, crates/tenport-run-credentials/**, .sqlx/**, Cargo.toml, Cargo.lock, rust-toolchain.toml, .github/workflows/server.yml]
