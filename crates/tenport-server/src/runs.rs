@@ -131,6 +131,15 @@ impl Runs {
         project: &Project,
         new: &NewRun,
     ) -> Result<RunName, RunsError> {
+        // Careful: two limits of this lock.
+        // 1. One lock for all tasks: starts of different tasks also wait for each other.
+        //    A start holds it for one Job list and one Job create, so this is fine while
+        //    starts are rare. If many starts come at once, use a lock per task, and keep
+        //    the map of locks from growing without end.
+        // 2. It works only with one Tenport replica: the lock lives in one process.
+        //    With two replicas the race comes back. Before that, move the check to a
+        //    place both replicas share: a fixed Job name per task (Kubernetes answers
+        //    409 to the second create), or a row in the database.
         let _one_start_at_a_time = self.start_lock.lock().await;
         self.require_idle(project, &new.task).await?;
         let fields = self.fields(project, new, OffsetDateTime::now_utc());
