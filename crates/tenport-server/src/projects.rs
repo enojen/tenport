@@ -62,16 +62,16 @@ pub(crate) async fn apply(
 }
 
 pub async fn is_member(db: &Db, user: &UserId, project: &ProjectId) -> Result<bool, ProjectsError> {
-    Ok(find_of_member(db, user, project).await?.is_some())
+    Ok(find_project_for_member(db, user, project).await?.is_some())
 }
 
-pub async fn find_of_member(
+pub async fn find_project_for_member(
     db: &Db,
     user: &UserId,
     project: &ProjectId,
 ) -> Result<Option<Project>, ProjectsError> {
     let mut conn = db.acquire().await?;
-    Ok(store::find_project_of_member(&mut conn, project, user).await?)
+    Ok(store::find_project_for_member(&mut conn, project, user).await?)
 }
 
 async fn require_admin(db: &Db, user: &UserId, org: &OrgId) -> Result<(), ProjectsError> {

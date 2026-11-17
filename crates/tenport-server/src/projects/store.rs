@@ -41,7 +41,7 @@ pub async fn list_projects_of_user(
     .await
 }
 
-pub async fn find_project_of_member(
+pub async fn find_project_for_member(
     conn: &mut SqliteConnection,
     project: &ProjectId,
     user: &UserId,

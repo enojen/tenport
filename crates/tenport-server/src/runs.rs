@@ -81,7 +81,7 @@ pub struct Runs {
 
 impl Runs {
     pub async fn start(&self, db: &Db, user: &UserId, new: NewRun) -> Result<Run, RunsError> {
-        let project = projects::find_of_member(db, user, &new.project)
+        let project = projects::find_project_for_member(db, user, &new.project)
             .await?
             .ok_or_else(|| RunsError::NotMember {
                 project: new.project.clone(),
