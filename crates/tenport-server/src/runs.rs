@@ -13,7 +13,12 @@ use sqlx::SqliteConnection;
 use time::OffsetDateTime;
 
 use crate::accounts::{Email, UserId};
-use crate::cluster::{Cluster, ClusterError, JobPhase};
+use futures::future::try_join_all;
+use futures::try_join;
+
+use crate::cluster::{
+    Cluster, ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodState,
+};
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
 use crate::name::Name;
@@ -22,8 +27,8 @@ use crate::tasks::TaskId;
 
 pub use command::{Command, CommandError, CommandName, command_rules};
 pub use model::{
-    Branch, BranchError, ClassName, ClassNameError, RunName, RunStarted, RunsEvent, ServiceName,
-    ServiceNameError,
+    Branch, BranchError, ClassName, ClassNameError, Run, RunName, RunPhase, RunStarted, RunState,
+    RunsEvent, ServiceName, ServiceNameError,
 };
 pub use template::{RunTemplate, TemplateError};
 
@@ -33,8 +38,17 @@ const GITHUB: &str = "https://github.com";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunsError {
-    #[error("only a member of the organization of the project {project} starts its runs")]
+    #[error("only a member of the organization of the project {project} sees and starts its runs")]
     NotMember { project: ProjectId },
+    #[error("Tenport does not know the run {run}")]
+    NotFound { run: RunName },
+    #[error("the box container of the run {run} has not started{}", reason_text(.reason))]
+    NotStarted {
+        run: RunName,
+        reason: Option<String>,
+    },
+    #[error("the run {run} has no log: its Job is gone")]
+    JobGone { run: RunName },
     #[error("task {task} still runs on the cluster: {}; wait until it ends", jobs.join(", "))]
     Busy { task: TaskId, jobs: Vec<String> },
     #[error(transparent)]
@@ -45,6 +59,15 @@ pub enum RunsError {
     Projects(#[from] ProjectsError),
     #[error(transparent)]
     Events(#[from] EventsError),
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+}
+
+fn reason_text(reason: &Option<String>) -> String {
+    reason
+        .as_ref()
+        .map(|reason| format!(": {reason}"))
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,13 +87,6 @@ pub struct NewRun {
     pub setup: String,
     pub services: Vec<ServiceName>,
     pub author: Author,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Run {
-    pub name: RunName,
-    pub project: ProjectId,
-    pub task: TaskId,
 }
 
 pub struct Runs {
@@ -99,16 +115,113 @@ impl Runs {
         };
         let event = Event::Runs(RunsEvent::RunStarted(started));
         events::append(db, Actor::User(user.clone()), event).await?;
-        Ok(Run {
-            name,
-            project: project.id,
-            task: new.task,
+        find_run(db, &name).await
+    }
+
+    pub async fn list_of_task(
+        &self,
+        db: &Db,
+        user: &UserId,
+        project: &ProjectId,
+        task: &TaskId,
+    ) -> Result<Vec<RunState>, RunsError> {
+        require_member(db, user, project).await?;
+        let (runs, jobs) = try_join!(
+            list_runs_of_task(db, project, task),
+            self.list_jobs_of_task(project, task)
+        )?;
+        let states = runs.into_iter().map(|run| {
+            let job = find_job_in(&jobs, &run);
+            self.run_state(run, job)
+        });
+        try_join_all(states).await
+    }
+
+    pub async fn find(
+        &self,
+        db: &Db,
+        user: &UserId,
+        name: &RunName,
+    ) -> Result<RunState, RunsError> {
+        let run = find_run_for_member(db, user, name).await?;
+        let job = self.find_job(&run).await?;
+        self.run_state(run, job.as_ref()).await
+    }
+
+    pub async fn open_log(
+        &self,
+        db: &Db,
+        user: &UserId,
+        name: &RunName,
+        follow: bool,
+    ) -> Result<LogReader, RunsError> {
+        let run = find_run_for_member(db, user, name).await?;
+        let pod = self.find_started_pod(&run).await?;
+        let read = LogRead {
+            follow,
+            tail_lines: None,
+        };
+        match self.cluster.read_log(&pod.name, read).await {
+            Err(ClusterError::NoPod(_)) => Err(RunsError::JobGone { run: run.name }),
+            other => Ok(other?),
+        }
+    }
+
+    pub async fn stop(&self, db: &Db, user: &UserId, name: &RunName) -> Result<(), RunsError> {
+        let run = find_run_for_member(db, user, name).await?;
+        self.cluster
+            .delete_job(&JobName::new(run.name.as_str()))
+            .await?;
+        Ok(())
+    }
+
+    async fn find_started_pod(&self, run: &Run) -> Result<PodState, RunsError> {
+        let Some(job) = self.find_job(run).await? else {
+            return Err(RunsError::JobGone {
+                run: run.name.clone(),
+            });
+        };
+        match self.cluster.find_pod(&job.name).await? {
+            Some(pod) if pod.started => Ok(pod),
+            pod => Err(RunsError::NotStarted {
+                run: run.name.clone(),
+                reason: pod.and_then(|pod| pod.reason),
+            }),
+        }
+    }
+
+    async fn run_state(&self, run: Run, job: Option<&JobState>) -> Result<RunState, RunsError> {
+        let Some(job) = job else {
+            return Ok(RunState {
+                run,
+                phase: RunPhase::Unknown,
+                reason: None,
+            });
+        };
+        let pod = self.cluster.find_pod(&job.name).await?;
+        Ok(RunState {
+            run,
+            phase: job.phase.into(),
+            reason: pod.and_then(|pod| pod.reason),
         })
     }
 
+    async fn find_job(&self, run: &Run) -> Result<Option<JobState>, RunsError> {
+        let jobs = self.list_jobs_of_task(&run.project, &run.task).await?;
+        Ok(find_job_in(&jobs, run).cloned())
+    }
+
+    async fn list_jobs_of_task(
+        &self,
+        project: &ProjectId,
+        task: &TaskId,
+    ) -> Result<Vec<JobState>, RunsError> {
+        let selector = format!("project-id={project},task={task}");
+        Ok(self.cluster.list_jobs(&selector).await?)
+    }
+
     async fn require_idle(&self, project: &Project, task: &TaskId) -> Result<(), RunsError> {
-        let selector = format!("project-id={},task={task}", project.id);
-        let jobs = self.cluster.list_jobs(&selector).await?;
+        let jobs = self.list_jobs_of_task(&project.id, task).await?;
         let running: Vec<String> = jobs
             .into_iter()
             .filter(|job| job.phase == JobPhase::Running)
@@ -147,6 +260,41 @@ impl Runs {
             setup: new.setup.clone(),
         }
     }
+}
+
+async fn require_member(db: &Db, user: &UserId, project: &ProjectId) -> Result<(), RunsError> {
+    if projects::is_member(db, user, project).await? {
+        Ok(())
+    } else {
+        Err(RunsError::NotMember {
+            project: project.clone(),
+        })
+    }
+}
+
+async fn find_run_for_member(db: &Db, user: &UserId, name: &RunName) -> Result<Run, RunsError> {
+    let run = find_run(db, name).await?;
+    require_member(db, user, &run.project).await?;
+    Ok(run)
+}
+
+async fn find_run(db: &Db, name: &RunName) -> Result<Run, RunsError> {
+    store::find_run(&mut *db.acquire().await?, name)
+        .await?
+        .ok_or_else(|| RunsError::NotFound { run: name.clone() })
+}
+
+async fn list_runs_of_task(
+    db: &Db,
+    project: &ProjectId,
+    task: &TaskId,
+) -> Result<Vec<Run>, RunsError> {
+    Ok(store::list_runs_of_task(&mut *db.acquire().await?, project, task).await?)
+}
+
+fn find_job_in<'a>(jobs: &'a [JobState], run: &Run) -> Option<&'a JobState> {
+    jobs.iter()
+        .find(|job| job.name.as_str() == run.name.as_str())
 }
 
 fn kube_name(task: &TaskId) -> String {

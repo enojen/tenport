@@ -1,19 +1,24 @@
 use std::collections::BTreeMap;
 
 use axum::Json;
-use axum::extract::State;
-use axum::extract::rejection::JsonRejection;
-use axum::http::StatusCode;
+use axum::body::{Body, Bytes};
+use axum::extract::rejection::{JsonRejection, QueryRejection};
+use axum::extract::{Path, Query, State};
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
+use futures::{AsyncBufReadExt, Stream, stream};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use time::OffsetDateTime;
+use utoipa::{IntoParams, ToSchema};
 
 use super::AppState;
 use super::auth::CurrentUser;
 use super::error::{HttpError, PROBLEM_JSON, Problem};
 use crate::accounts::Email;
+use crate::cluster::LogReader;
 use crate::name::Name;
 use crate::projects::ProjectId;
-use crate::runs::{self, Branch, ClassName, Command, RunsError, ServiceName};
+use crate::runs::{self, Branch, ClassName, Command, RunName, RunPhase, RunsError, ServiceName};
 use crate::tasks::TaskId;
 
 #[derive(Deserialize, ToSchema)]
@@ -81,6 +86,186 @@ pub async fn start_run(
         .await
         .map_err(start_error)?;
     Ok((StatusCode::CREATED, Json(run.into())))
+}
+
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct TaskRuns {
+    #[param(value_type = String)]
+    project: ProjectId,
+    #[param(value_type = String, example = "TEN-301")]
+    task: TaskId,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RunState {
+    #[schema(example = "task-ten-301-1117-101500")]
+    name: String,
+    project: String,
+    #[schema(example = "TEN-301")]
+    task: String,
+    #[schema(example = "build")]
+    command: String,
+    #[schema(example = "build")]
+    class: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    created: OffsetDateTime,
+    phase: RunPhase,
+    #[schema(example = "OOMKilled")]
+    reason: Option<String>,
+}
+
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct LogQuery {
+    #[serde(default)]
+    follow: bool,
+}
+
+#[utoipa::path(
+    get,
+    path = "/runs",
+    security(("bearer" = [])),
+    params(TaskRuns),
+    responses(
+        (status = OK, description = "The runs of the task, the oldest first", body = Vec<RunState>),
+        (status = BAD_REQUEST, description = "No project or task, or a task that is not a task id", body = Problem, content_type = PROBLEM_JSON),
+        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
+        (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+    ),
+)]
+pub async fn list_runs(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    query: Result<Query<TaskRuns>, QueryRejection>,
+) -> Result<Json<Vec<RunState>>, HttpError> {
+    let Query(query) = query?;
+    let runs = state
+        .runs
+        .list_of_task(&state.db, &user.id, &query.project, &query.task)
+        .await
+        .map_err(run_error)?;
+    Ok(Json(runs.into_iter().map(Into::into).collect()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/runs/{name}",
+    security(("bearer" = [])),
+    params(("name" = String, Path, description = "The name of the run, the name of its Job")),
+    responses(
+        (status = OK, description = "The run, with the phase of its Job", body = RunState),
+        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
+        (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
+    ),
+)]
+pub async fn find_run(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(name): Path<RunName>,
+) -> Result<Json<RunState>, HttpError> {
+    let run = state
+        .runs
+        .find(&state.db, &user.id, &name)
+        .await
+        .map_err(run_error)?;
+    Ok(Json(run.into()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/runs/{name}/log",
+    security(("bearer" = [])),
+    params(
+        ("name" = String, Path, description = "The name of the run, the name of its Job"),
+        LogQuery,
+    ),
+    responses(
+        (status = OK, description = "The log of the box container; with follow=true it stays open until the container ends", body = String, content_type = "text/plain"),
+        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
+        (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
+        (status = CONFLICT, description = "The box container has not started (code box-not-started; ask again after Retry-After seconds), or the Job is gone (code job-gone)", body = Problem, content_type = PROBLEM_JSON,
+            headers(("Retry-After" = u32, description = "Seconds to wait before asking again; only with box-not-started"))),
+    ),
+)]
+pub async fn read_log(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(name): Path<RunName>,
+    query: Result<Query<LogQuery>, QueryRejection>,
+) -> Result<Response, HttpError> {
+    let Query(query) = query?;
+    let reader = state
+        .runs
+        .open_log(&state.db, &user.id, &name, query.follow)
+        .await
+        .map_err(run_error)?;
+    let headers = [(header::CONTENT_TYPE, TEXT_PLAIN)];
+    Ok((headers, Body::from_stream(log_chunks(reader))).into_response())
+}
+
+#[utoipa::path(
+    delete,
+    path = "/runs/{name}",
+    security(("bearer" = [])),
+    params(("name" = String, Path, description = "The name of the run, the name of its Job")),
+    responses(
+        (status = NO_CONTENT, description = "The run is stopped: its Job and pod are deleted, or were gone"),
+        (status = UNAUTHORIZED, description = "No token, or a token Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
+        (status = FORBIDDEN, description = "The user is not a member of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
+    ),
+)]
+pub async fn stop_run(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(name): Path<RunName>,
+) -> Result<StatusCode, HttpError> {
+    state
+        .runs
+        .stop(&state.db, &user.id, &name)
+        .await
+        .map_err(run_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+const TEXT_PLAIN: &str = "text/plain; charset=utf-8";
+
+fn log_chunks(reader: LogReader) -> impl Stream<Item = std::io::Result<Bytes>> {
+    stream::try_unfold(reader, |mut reader| async move {
+        let chunk = Bytes::copy_from_slice(reader.fill_buf().await?);
+        reader.as_mut().consume(chunk.len());
+        Ok((!chunk.is_empty()).then_some((chunk, reader)))
+    })
+}
+
+fn run_error(error: RunsError) -> HttpError {
+    match error {
+        RunsError::NotMember { .. } => HttpError::Forbidden(error.to_string()),
+        RunsError::NotFound { .. } => HttpError::NotFound(error.to_string()),
+        RunsError::NotStarted { .. } => HttpError::BoxNotStarted(error.to_string()),
+        RunsError::JobGone { .. } => HttpError::JobGone(error.to_string()),
+        other => HttpError::internal(other),
+    }
+}
+
+impl From<runs::RunState> for RunState {
+    fn from(state: runs::RunState) -> Self {
+        let run = state.run;
+        Self {
+            name: run.name.to_string(),
+            project: run.project.to_string(),
+            task: run.task.to_string(),
+            command: run.command.as_str().to_owned(),
+            class: run.class.as_str().to_owned(),
+            created: run.created,
+            phase: state.phase,
+            reason: state.reason,
+        }
+    }
 }
 
 fn new_run(body: NewRun) -> Result<runs::NewRun, HttpError> {

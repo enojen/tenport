@@ -303,6 +303,9 @@ The steps, in order:
      when the Job is gone (10 minutes after it ends) and no `run.finished` is stored yet.
      `reason` is the box container's, such as `OOMKilled` or `CreateContainerConfigError`.
      404 for a run Tenport does not know, 403 for a user outside the project's organization.
+     The log does not wait. When the box container has not started, it answers 409 with the
+     code `box-not-started`, the reason, and `Retry-After: 5`: the client asks again after 5
+     seconds. When the Job is gone, 409 with the code `job-gone`: asking again does not help.
    - Then the image of tenport main in tenyard, and a real run.
    - Deleting a task moves to step 4: with no task volumes, a task has only its bucket archive
      to delete, and that needs the bucket keys of step 4.
@@ -314,6 +317,10 @@ The steps, in order:
    the phase after the Job is deleted.
 6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/rm/ls` go to
    Tenport. The kubeconfig and the bucket key file leave the computer.
+   - To decide here: a client that only follows `Retry-After` asks forever when the box
+     cannot start, such as with `CreateContainerConfigError`, because that reason does not
+     go away alone. The 409 `box-not-started` carries the reason, so the CLI can stop on a
+     reason that is an error and show it.
 7. The agent in a box reaches Tenport from inside the cluster with a run token that starts runs
    in its own project only, with a limit on nested runs and on open runs at one time.
 8. The cluster watch: nodes, with their Hetzner type and price.
