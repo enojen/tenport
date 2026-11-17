@@ -161,7 +161,7 @@ When a step fails again and again, the babysitter stops and asks the user (`ques
 | For each Job, Tenport makes a one-hour GitHub App token for that project's repository only | Today |
 | The box never sees the real token. It gets a placeholder, and the injector asks Tenport for the real token while the Job is open (`POST /run-credentials`). This route opens nothing else | Today |
 | The placeholder is made from the Job's uid with a key. A changed key breaks the runs that are open at that time | Today |
-| Tenport reads the boot log of each ended pod and stores it as a `job.finished` event. It lists the runs of a task | Today |
+| Tenport reads the boot log of each ended pod and stores it as a `run.finished` event. It lists the runs of a task | Today |
 | The tracker key of a project goes to a Secret. Today the CLI writes it before each Job; Tenport will write it when an admin changes it, and keep no copy (section 9) | Decided |
 | The claude.ai login of the boxes is copied from the computer to a Secret. Tenport's Claude subscriptions replace this copy | Proposed |
 
@@ -251,7 +251,8 @@ Decided (2026-11-17):
   database, not in a log. The API only writes a Secret and never gives it back; it tells only
   that it is there and when it changed. Only an organization admin may write one. k3s gets
   `secrets-encryption`, so the Secrets are encrypted on disk.
-- While both servers run, Tenport's Jobs have their own label and their template sends the
+- While both servers run, Tenport's Jobs have their own label,
+  `app.kubernetes.io/managed-by: tenport` in place of `app: tenyard`, and their template sends the
   injector to Tenport, so the tenbox server never touches them. Every box pod has the label
   `box: "true"`, and Tetragon and the process metrics select it, so they see the boxes of both.
 - Tenport is open on the tailnet only, like Grafana. A public domain waits for more users.
@@ -271,7 +272,7 @@ What the tenbox server and the CLI do, and where Tenport is:
 | The CLI makes the presigned links of the bucket archive, with the bucket keys on the computer | Step 4 |
 | `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Step 4 |
 | A placeholder Secret for each new Job | Step 4 |
-| `job.finished` when a box container ends, with the OOM count and the close output from the pod log | Step 5 |
+| `run.finished` when a box container ends, with the OOM count and the close output from the pod log | Step 5 |
 | `GET /tasks/{task}/runs`: the runs of a task | Step 5 |
 | Nodes, every 30 seconds: a worker that comes or goes, with its Hetzner type and hourly price | Step 8 |
 | Task volumes: their price, the deletion after the grace period and the ntfy notice | Not moved: no task volumes |
@@ -292,7 +293,7 @@ The steps, in order:
 4. What a run needs comes from Tenport: the project Secrets, the presigned links of the bucket
    archive (the bucket keys in Tenport's env), the GitHub App token, the placeholder Secret and
    `POST /run-credentials`.
-5. The runs: `job.finished` and `GET /tasks/{task}/runs`.
+5. The runs: `run.finished` and `GET /tasks/{task}/runs`.
 6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/rm/ls` go to
    Tenport. The kubeconfig and the bucket key file leave the computer.
 7. The agent in a box reaches Tenport from inside the cluster with a run token that starts runs

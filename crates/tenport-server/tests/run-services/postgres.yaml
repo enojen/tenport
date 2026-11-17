@@ -1,0 +1,36 @@
+# Postgres for the tests: a native sidecar, data in memory, nothing flushed.
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          restartPolicy: Always
+          args:
+            - -c
+            - fsync=off
+            - -c
+            - synchronous_commit=off
+            - -c
+            - full_page_writes=off
+            - -c
+            - max_connections=300
+          env:
+            - { name: POSTGRES_USER, value: test }
+            - { name: POSTGRES_PASSWORD, value: test }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 1Gi }
+          startupProbe:
+            exec: { command: [pg_isready, -h, 127.0.0.1, -U, test] }
+            periodSeconds: 1
+            failureThreshold: 120
+          volumeMounts:
+            - { name: pgdata, mountPath: /var/lib/postgresql/data }
+      containers:
+        - name: box
+          env:
+            - { name: TEST_PG_URL, value: "postgres://test:test@127.0.0.1:5432" }
+      volumes:
+        - name: pgdata
+          emptyDir: { medium: Memory, sizeLimit: 1Gi }

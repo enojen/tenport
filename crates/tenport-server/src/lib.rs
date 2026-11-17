@@ -11,6 +11,6 @@ mod id;
 pub mod logs;
 pub mod name;
 pub mod projects;
-mod runs;
+pub mod runs;
 pub mod tasks;
 pub mod tracker;

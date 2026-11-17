@@ -1,10 +1,13 @@
 use std::io::Write;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use anyhow::Context;
+use tenport_server::cluster::KubeCluster;
 use tenport_server::command::{self, Command, USAGE};
 use tenport_server::config::Config;
 use tenport_server::http::{self, AppState};
+use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::{db, logs};
 use tokio::net::TcpListener;
 use tokio::signal::unix::{Signal, SignalKind, signal};
@@ -48,14 +51,31 @@ async fn add_user(registration: tenport_server::accounts::Registration) -> anyho
 async fn serve() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     let db = db::open(&config.database).await?;
+    let cluster = KubeCluster::connect(&config.run_namespace)
+        .await
+        .context("cannot reach the Kubernetes API")?;
+    let runs = Runs {
+        cluster: Arc::new(cluster),
+        template: RunTemplate {
+            dir: config.run_template,
+            services_dir: config.run_services,
+        },
+        box_image: config.box_image,
+    };
     let listener = TcpListener::bind(config.listen)
         .await
         .with_context(|| format!("cannot listen on {}", config.listen))?;
     let terminate = signal(SignalKind::terminate()).context("cannot watch SIGTERM")?;
     tracing::info!(address = %config.listen, "listening");
-    axum::serve(listener, http::router(AppState { db }))
-        .with_graceful_shutdown(stopped(terminate))
-        .await?;
+    axum::serve(
+        listener,
+        http::router(AppState {
+            db,
+            runs: Arc::new(runs),
+        }),
+    )
+    .with_graceful_shutdown(stopped(terminate))
+    .await?;
     tracing::info!("stopped");
     Ok(())
 }

@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "select projects.id as \"id: _\", projects.org_id as \"org: _\", projects.name as \"name: _\",\n                  projects.repo as \"repo: _\"\n           from projects join memberships on memberships.org_id = projects.org_id\n           where projects.id = ? and memberships.user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: _",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "org: _",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "name": "name: _",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "repo: _",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "repo"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2cfc40b8995d4592a66c4f28ab845d96167f690c5f4f06850faea30e7a9fadc9"
+}

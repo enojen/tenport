@@ -1,0 +1,100 @@
+# One agent run: one Job, one pod, the task home on /home/tenbox, the secrets as env.
+# The agent fills the __X__ fields. The image reads TENBOX_* and the secrets at boot
+# (tenbox machines/k8s/boot.sh) and ends when its claude session is done.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: task-__NAME__-__RUN__
+  labels: { app: tenyard, task: "__TASK__", project: "__PROJECT__", project-id: "__PROJECT_ID__", command: "__COMMAND__" }
+spec:
+  backoffLimit: 0
+  # One run is one tenbox command and the session it leaves behind; 8 hours is a long one.
+  activeDeadlineSeconds: 28800
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels: { app: tenyard, box: "true", task: "__TASK__", project: "__PROJECT__", class: __CLASS__, command: "__COMMAND__" }
+      # A running agent is never moved: the Job does not retry and its session would be lost.
+      annotations: { cluster-autoscaler.kubernetes.io/safe-to-evict: "false" }
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 1001, fsGroupChangePolicy: OnRootMismatch }
+      terminationGracePeriodSeconds: 60
+      imagePullSecrets: [{ name: ghcr }]
+      # procs sees the box's processes (docs/reference.md, "Process metrics").
+      shareProcessNamespace: true
+      initContainers:
+        # A native sidecar: it ends when the box ends. Another user with no capabilities, so it
+        # reads the stat and cmdline of the box's processes but not their env or files.
+        - name: processes
+          image: ghcr.io/enojen/tenport-procs:2efd83433cccc6cfe4ea7487bdba2ddead48f8fb@sha256:ed1ba3d7ce83ecbd80dc49eeb805d64c0a5e82d8b9578f7c54af2534b5f83ba6
+          restartPolicy: Always
+          args: [--interval-ms, "100"]
+          # The box has ended: stay 15 s more, so a 10 s scrape still reads the last counters.
+          lifecycle: { preStop: { sleep: { seconds: 15 } } }
+          ports: [{ name: process-metrics, containerPort: 9256 }]
+          securityContext:
+            runAsUser: 65534
+            runAsGroup: 65534
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 10m, memory: 8Mi }
+            limits: { memory: 32Mi }
+      containers:
+        - name: box
+          image: __IMAGE__
+          imagePullPolicy: Always
+          securityContext:
+            runAsUser: 1001
+            runAsGroup: 1001
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            seccompProfile: { type: RuntimeDefault }
+          env:
+            - { name: TENBOX_TASK, value: "__TASK__" }
+            - { name: TENBOX_PROJECT, value: "__PROJECT__" }
+            - { name: TENBOX_REPO, value: "__REPO__" }
+            - { name: TENBOX_BASE, value: "__BASE__" }
+            - { name: TENBOX_GIT_NAME, value: "__GIT_NAME__" }
+            - { name: TENBOX_GIT_EMAIL, value: "__GIT_EMAIL__" }
+            - name: TENBOX_CMD
+              value: |-
+                __CMD__
+            - name: TENBOX_ENV
+              value: |-
+                __ENV__
+            - { name: TENBOX_ARCHIVE_GET, value: "__ARCHIVE_GET__" }
+            - { name: TENBOX_ARCHIVE_PUT, value: "__ARCHIVE_PUT__" }
+            - { name: TENBOX_SETUP, value: "__SETUP__" }
+            - name: GITHUB_TOKEN
+              valueFrom: { secretKeyRef: { name: task-__NAME__-__RUN__-github, key: token } }
+            - { name: TENBOX_INJECTOR_CA, value: /etc/tenyard/injector/ca.crt }
+            - name: CLAUDE_CREDENTIALS
+              valueFrom: { secretKeyRef: { name: claude-credentials, key: credentials.json } }
+            - name: TRACKER_API_KEY
+              valueFrom: { secretKeyRef: { name: project-__PROJECT_ID__, key: tracker_api_key, optional: true } }
+            - name: NTFY_URL
+              valueFrom: { secretKeyRef: { name: project-__PROJECT_ID__, key: ntfy_url, optional: true } }
+            - { name: HTTPS_PROXY, value: http://proxy.egress.svc.cluster.local:3128 }
+            - { name: HTTP_PROXY, value: http://proxy.egress.svc.cluster.local:3128 }
+            - { name: NO_PROXY, value: "localhost,127.0.0.1,::1" }
+            - { name: NODE_USE_ENV_PROXY, value: "1" }
+            - { name: DISABLE_TELEMETRY, value: "1" }
+            - { name: DISABLE_ERROR_REPORTING, value: "1" }
+          # The resource class from classes.yaml.
+          resources:
+            requests: { cpu: __CPU__, memory: __MEMORY__, ephemeral-storage: 1Gi }
+            limits: { memory: __MEMORY__, ephemeral-storage: 12Gi }
+          volumeMounts:
+            - { name: home, mountPath: /home/tenbox }
+            - { name: injector-ca, mountPath: /etc/tenyard/injector, readOnly: true }
+      volumes:
+        - name: home
+          emptyDir: { sizeLimit: 8Gi }
+        - name: injector-ca
+          configMap: { name: injector-ca }

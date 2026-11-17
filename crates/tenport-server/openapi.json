@@ -1,6 +1,22 @@
 {
   "components": {
     "schemas": {
+      "Author": {
+        "properties": {
+          "email": {
+            "example": "1+enojen@users.noreply.github.com",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ],
+        "type": "object"
+      },
       "Health": {
         "properties": {
           "ok": {
@@ -80,6 +96,69 @@
           "org",
           "name",
           "repo"
+        ],
+        "type": "object"
+      },
+      "NewRun": {
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/Author"
+          },
+          "base": {
+            "example": "main",
+            "type": "string"
+          },
+          "class": {
+            "example": "build",
+            "type": "string"
+          },
+          "command": {
+            "example": [
+              "tenbox",
+              "build",
+              "TEN-301"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "project": {
+            "type": "string"
+          },
+          "services": {
+            "example": [
+              "postgres"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "setup": {
+            "type": "string"
+          },
+          "task": {
+            "example": "TEN-301",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "task",
+          "command",
+          "base",
+          "class",
+          "author"
         ],
         "type": "object"
       },
@@ -182,6 +261,27 @@
           "member"
         ],
         "type": "string"
+      },
+      "Run": {
+        "properties": {
+          "name": {
+            "example": "task-ten-301-1117-101500",
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "task": {
+            "example": "TEN-301",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "project",
+          "task"
+        ],
+        "type": "object"
       },
       "TaskClosed": {
         "properties": {
@@ -511,6 +611,79 @@
               }
             },
             "description": "The user is not an admin of the organization"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/runs": {
+      "post": {
+        "operationId": "start_run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewRun"
+              }
+            }
+          },
+          "description": "One tenbox command to run in a box",
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            },
+            "description": "The Job of the run is created"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The body is not a valid run: an unknown command, class or service"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No token, or a token Tenport does not know"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The user is not a member of the project's organization"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A Job of the task still runs (code machine-busy)"
           }
         },
         "security": [
