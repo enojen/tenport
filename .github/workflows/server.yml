@@ -29,8 +29,9 @@ jobs:
           cache-from: |
             type=gha,scope=server-check
             type=gha,scope=server-build
-          cache-to: type=gha,scope=server-check,mode=max
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=server-check,mode=max' || '' }}
       - name: Build
+        if: github.event_name == 'push'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
