@@ -4,8 +4,8 @@ use super::*;
 
 const URL: &str = "https://objects.example.test/tenbox-test";
 
-fn bucket_at(url: &str) -> Result<ArchiveBucket, ArchivesError> {
-    ArchiveBucket::new(url, "hel1", "key-id".to_owned(), "key-secret".to_owned())
+fn bucket_at(url: &str) -> Result<TaskArchiveBucket, TaskArchivesError> {
+    TaskArchiveBucket::new(url, "hel1", "key-id".to_owned(), "key-secret".to_owned())
 }
 
 fn project() -> ProjectId {
@@ -55,7 +55,7 @@ fn a_bucket_url_without_one_bucket_name_is_refused() {
         "ftp://objects.example.test/a",
     ] {
         assert!(
-            matches!(bucket_at(url), Err(ArchivesError::BadUrl { .. })),
+            matches!(bucket_at(url), Err(TaskArchivesError::BadUrl { .. })),
             "{url}"
         );
     }
@@ -79,14 +79,14 @@ fn opens_the_keys_from_their_files_without_the_line_end() {
     let secret_file = dir.path().join("secret");
     fs::write(&key_file, "key-id\n").unwrap();
     fs::write(&secret_file, "key-secret\n").unwrap();
-    let config = ArchiveBucketConfig {
+    let config = TaskArchiveBucketConfig {
         url: URL.to_owned(),
         region: "hel1".to_owned(),
         key_file,
         secret_file,
     };
 
-    let urls = ArchiveBucket::open(&config)
+    let urls = TaskArchiveBucket::open(&config)
         .unwrap()
         .presign(&project(), &task());
 
@@ -102,7 +102,7 @@ fn an_empty_or_missing_key_file_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let empty = dir.path().join("empty");
     fs::write(&empty, "\n").unwrap();
-    let config = |key_file: PathBuf| ArchiveBucketConfig {
+    let config = |key_file: PathBuf| TaskArchiveBucketConfig {
         url: URL.to_owned(),
         region: "hel1".to_owned(),
         key_file,
@@ -110,11 +110,11 @@ fn an_empty_or_missing_key_file_is_refused() {
     };
 
     assert!(matches!(
-        ArchiveBucket::open(&config(empty.clone())),
-        Err(ArchivesError::Empty { .. })
+        TaskArchiveBucket::open(&config(empty.clone())),
+        Err(TaskArchivesError::Empty { .. })
     ));
     assert!(matches!(
-        ArchiveBucket::open(&config(dir.path().join("missing"))),
-        Err(ArchivesError::Read { .. })
+        TaskArchiveBucket::open(&config(dir.path().join("missing"))),
+        Err(TaskArchivesError::Read { .. })
     ));
 }

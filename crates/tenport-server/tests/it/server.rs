@@ -4,13 +4,13 @@ use std::sync::Arc;
 
 use tempfile::TempDir;
 use tenport_server::accounts::{self, GithubLogin, NewUser, Registration, Role, Token};
-use tenport_server::archives::ArchiveBucket;
 use tenport_server::cluster::FakeCluster;
 use tenport_server::db::{self, Db};
 use tenport_server::events::Actor;
 use tenport_server::http::{AppState, Limiter, Limits, router};
 use tenport_server::name::Name;
 use tenport_server::runs::{RunTemplate, Runs};
+use tenport_server::task_archives::TaskArchiveBucket;
 use tokio::net::TcpListener;
 
 pub struct TestServer {
@@ -84,8 +84,8 @@ fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
     Runs::new(cluster, template, "box:1".to_owned(), test_bucket())
 }
 
-fn test_bucket() -> ArchiveBucket {
-    ArchiveBucket::new(
+fn test_bucket() -> TaskArchiveBucket {
+    TaskArchiveBucket::new(
         "https://objects.example.test/tenbox-test",
         "hel1",
         "key-id".to_owned(),

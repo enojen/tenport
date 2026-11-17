@@ -1,6 +1,5 @@
 pub mod accounts;
 mod agents;
-pub mod archives;
 pub mod cluster;
 pub mod command;
 pub mod config;
@@ -15,5 +14,6 @@ pub mod logs;
 pub mod name;
 pub mod projects;
 pub mod runs;
+pub mod task_archives;
 pub mod tasks;
 pub mod tracker;

@@ -72,22 +72,25 @@ fn reads_the_run_settings_that_are_set() {
 #[test]
 fn has_no_archive_bucket_when_none_of_its_names_is_set() {
     let config = config(&[(DATABASE, "tenport.db")]).unwrap();
-    assert_eq!(config.archive_bucket, None);
+    assert_eq!(config.task_archive_bucket, None);
 }
 
 #[test]
 fn reads_the_archive_bucket_when_all_its_names_are_set() {
     let config = config(&[
         (DATABASE, "tenport.db"),
-        (BUCKET, "https://objects.example.test/tenbox-test"),
-        (BUCKET_REGION, "hel1"),
-        (BUCKET_KEY_FILE, "/bucket/key"),
-        (BUCKET_SECRET_FILE, "/bucket/secret"),
+        (
+            TASK_ARCHIVE_BUCKET,
+            "https://objects.example.test/tenbox-test",
+        ),
+        (TASK_ARCHIVE_BUCKET_REGION, "hel1"),
+        (TASK_ARCHIVE_BUCKET_KEY_FILE, "/bucket/key"),
+        (TASK_ARCHIVE_BUCKET_SECRET_FILE, "/bucket/secret"),
     ])
     .unwrap();
     assert_eq!(
-        config.archive_bucket,
-        Some(ArchiveBucketConfig {
+        config.task_archive_bucket,
+        Some(TaskArchiveBucketConfig {
             url: "https://objects.example.test/tenbox-test".to_owned(),
             region: "hel1".to_owned(),
             key_file: PathBuf::from("/bucket/key"),
@@ -101,12 +104,15 @@ fn refuses_an_archive_bucket_that_misses_one_of_its_names() {
     assert_eq!(
         config(&[
             (DATABASE, "tenport.db"),
-            (BUCKET, "https://objects.example.test/tenbox-test"),
-            (BUCKET_REGION, "hel1"),
-            (BUCKET_KEY_FILE, "/bucket/key"),
+            (
+                TASK_ARCHIVE_BUCKET,
+                "https://objects.example.test/tenbox-test"
+            ),
+            (TASK_ARCHIVE_BUCKET_REGION, "hel1"),
+            (TASK_ARCHIVE_BUCKET_KEY_FILE, "/bucket/key"),
         ]),
         Err(ConfigError::Missing {
-            name: BUCKET_SECRET_FILE
+            name: TASK_ARCHIVE_BUCKET_SECRET_FILE
         })
     );
 }

@@ -6,7 +6,7 @@ use std::time::Duration;
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use url::Url;
 
-use crate::config::ArchiveBucketConfig;
+use crate::config::TaskArchiveBucketConfig;
 use crate::projects::ProjectId;
 use crate::tasks::TaskId;
 
@@ -16,7 +16,7 @@ mod tests;
 const URL_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Debug, thiserror::Error)]
-pub enum ArchivesError {
+pub enum TaskArchivesError {
     #[error("cannot read {}: {source}", path.display())]
     Read { path: PathBuf, source: io::Error },
     #[error("{} is empty", path.display())]
@@ -25,31 +25,31 @@ pub enum ArchivesError {
     BadUrl { url: String, detail: String },
 }
 
-pub struct ArchiveBucket {
+pub struct TaskArchiveBucket {
     bucket: Bucket,
     credentials: Credentials,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ArchiveUrls {
+pub struct TaskArchiveUrls {
     pub get: String,
     pub put: String,
 }
 
-impl ArchiveBucket {
+impl TaskArchiveBucket {
     pub fn new(
         url: &str,
         region: &str,
         key: String,
         secret: String,
-    ) -> Result<Self, ArchivesError> {
+    ) -> Result<Self, TaskArchivesError> {
         Ok(Self {
             bucket: bucket(url, region)?,
             credentials: Credentials::new(key, secret),
         })
     }
 
-    pub fn open(config: &ArchiveBucketConfig) -> Result<Self, ArchivesError> {
+    pub fn open(config: &TaskArchiveBucketConfig) -> Result<Self, TaskArchivesError> {
         Self::new(
             &config.url,
             &config.region,
@@ -58,10 +58,10 @@ impl ArchiveBucket {
         )
     }
 
-    pub fn presign(&self, project: &ProjectId, task: &TaskId) -> ArchiveUrls {
+    pub fn presign(&self, project: &ProjectId, task: &TaskId) -> TaskArchiveUrls {
         let key = task_archive_key(project, task);
         let credentials = Some(&self.credentials);
-        ArchiveUrls {
+        TaskArchiveUrls {
             get: self
                 .bucket
                 .get_object(credentials, &key)
@@ -76,10 +76,10 @@ impl ArchiveBucket {
     }
 }
 
-impl fmt::Debug for ArchiveBucket {
+impl fmt::Debug for TaskArchiveBucket {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("ArchiveBucket")
+            .debug_struct("TaskArchiveBucket")
             .field("url", &self.bucket.base_url().as_str())
             .field("region", &self.bucket.region())
             .finish_non_exhaustive()
@@ -90,8 +90,8 @@ fn task_archive_key(project: &ProjectId, task: &TaskId) -> String {
     format!("tasks/{project}/{task}.tar.zst")
 }
 
-fn bucket(url: &str, region: &str) -> Result<Bucket, ArchivesError> {
-    let bad_url = |detail: String| ArchivesError::BadUrl {
+fn bucket(url: &str, region: &str) -> Result<Bucket, TaskArchivesError> {
+    let bad_url = |detail: String| TaskArchivesError::BadUrl {
         url: url.to_owned(),
         detail,
     };
@@ -108,14 +108,14 @@ fn bucket(url: &str, region: &str) -> Result<Bucket, ArchivesError> {
         .map_err(|error| bad_url(error.to_string()))
 }
 
-fn read_secret(path: &Path) -> Result<String, ArchivesError> {
-    let text = std::fs::read_to_string(path).map_err(|source| ArchivesError::Read {
+fn read_secret(path: &Path) -> Result<String, TaskArchivesError> {
+    let text = std::fs::read_to_string(path).map_err(|source| TaskArchivesError::Read {
         path: path.to_owned(),
         source,
     })?;
     let secret = text.trim();
     if secret.is_empty() {
-        return Err(ArchivesError::Empty {
+        return Err(TaskArchivesError::Empty {
             path: path.to_owned(),
         });
     }

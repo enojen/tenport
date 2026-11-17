@@ -2,8 +2,8 @@ use std::path::Path;
 
 use super::*;
 use crate::accounts::Role;
-use crate::archives::ArchiveBucket;
 use crate::fixtures::{project_of, register};
+use crate::task_archives::TaskArchiveBucket;
 use std::time::Duration;
 
 use futures::future::join_all;
@@ -120,8 +120,8 @@ fn the_run_stamp_is_month_day_and_time_in_utc() {
     assert_eq!(run_stamp(at), "1117-090503");
 }
 
-fn test_bucket() -> ArchiveBucket {
-    ArchiveBucket::new(
+fn test_bucket() -> TaskArchiveBucket {
+    TaskArchiveBucket::new(
         "https://objects.example.test/tenbox-test",
         "hel1",
         "key-id".to_owned(),

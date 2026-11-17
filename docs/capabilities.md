@@ -256,8 +256,8 @@ Decided (2026-11-17):
   injector to Tenport, so the tenbox server never touches them. Every box pod has the label
   `box: "true"`, and Tetragon and the process metrics select it, so they see the boxes of both.
 - Tenport is open on the tailnet only, like Grafana. A public domain waits for more users.
-- The task home is a bucket archive, no longer a volume (tenbox #313). The old volumes move to
-  the bucket outside this plan, so Tenport does not watch volumes.
+- The task home is a task archive in a bucket, no longer a volume (tenbox #313). The old volumes
+  move to the bucket outside this plan, so Tenport does not watch volumes.
 
 What the tenbox server and the CLI do, and where Tenport is:
 
@@ -269,7 +269,7 @@ What the tenbox server and the CLI do, and where Tenport is:
 | `POST /events`: takes the task events; an id that comes twice is stored once | Done; the CLI sends `task.started` and `task.closed` |
 | The CLI starts, follows, stops and deletes the Jobs with a kubeconfig | Steps 3 and 6 |
 | The CLI writes the Secret `project-<project id>` before each Job | Step 4: `PUT /projects/{project}/secrets/{name}`; the CLI stops in step 6 |
-| The CLI makes the presigned links of the bucket archive, with the bucket keys on the computer | Step 4: Tenport makes them for its own Jobs; the CLI stops in step 6 |
+| The CLI makes the presigned links of the task archive, with the bucket keys on the computer | Step 4: Tenport makes them for its own Jobs; the CLI stops in step 6 |
 | `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Step 4 |
 | A placeholder Secret for each new Job | Step 4 |
 | `run.finished` when a box container ends, with the OOM count and the close output from the pod log | Step 5 |
@@ -308,12 +308,12 @@ The steps, in order:
      The log does not wait. When the box container has not started, it answers 409 with the
      code `box-not-started`, the reason, and `Retry-After: 5`: the client asks again after 5
      seconds. When the Job is gone, 409 with the code `job-gone`: asking again does not help.
-   - Deleting a task moves to step 4: with no task volumes, a task has only its bucket archive
+   - Deleting a task moves to step 4: with no task volumes, a task has only its task archive
      to delete, and that needs the bucket keys of step 4.
 4. Now; k3s has `secrets-encryption` (tenyard #127). What a run needs comes from Tenport: the
-   project secrets, the presigned links of the bucket archive (the bucket keys in Tenport's
+   project secrets, the presigned links of the task archive (the bucket keys in Tenport's
    env), the GitHub App token, the placeholder Secret and `POST /run-credentials`. Deleting a
-   task, which deletes its bucket archive (the CLI's `machine rm`). One PR for each, in this
+   task, which deletes its task archive (the CLI's `machine rm`). One PR for each, in this
    order.
    - The project secrets: `PUT /projects/{project}/secrets/{name}` with `{"value": ...}`,
      `DELETE /projects/{project}/secrets/{name}`, and `GET /projects/{project}/secrets`, which
@@ -321,11 +321,12 @@ The steps, in order:
      `ntfy_url`, the keys the Job template reads. Their events are `project.secret_changed` and
      `project.secret_deleted`, with the name only. Until step 6 the CLI still writes the whole
      Secret before each of its Jobs, with the values of the computer. Done: tenport #31.
-   - The bucket archive: Tenport reads the bucket from `TENPORT_BUCKET` (a URL whose path is the
-     bucket name), `TENPORT_BUCKET_REGION`, `TENPORT_BUCKET_KEY_FILE` and
-     `TENPORT_BUCKET_SECRET_FILE`, and does not serve without them. Each Job gets a GET and a PUT
-     link to `tasks/<project id>/<task>.tar.zst`, good for 24 hours, the same object and the
-     same time as the CLI's; a Job ends after 8 hours at most.
+   - The task archive: Tenport reads its bucket from `TENPORT_TASK_ARCHIVE_BUCKET` (a URL
+     whose path is the bucket name), `TENPORT_TASK_ARCHIVE_BUCKET_REGION`,
+     `TENPORT_TASK_ARCHIVE_BUCKET_KEY_FILE` and `TENPORT_TASK_ARCHIVE_BUCKET_SECRET_FILE`, and
+     does not serve without them. Each Job gets a GET and a PUT link to
+     `tasks/<project id>/<task>.tar.zst`, good for 24 hours, the same object and the same time
+     as the CLI's; a Job ends after 8 hours at most.
    - Deleting a task: `DELETE /tasks/{task}?project=<id>`, with the event `task.deleted`.
    - Tenport's Jobs send their placeholders to an injector of their own, which asks Tenport;
      the injector of the tenbox server stays as it is until step 11.

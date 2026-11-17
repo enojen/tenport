@@ -14,7 +14,7 @@ use time::OffsetDateTime;
 use tokio::sync::Mutex;
 
 use crate::accounts::{Email, UserId};
-use crate::archives::ArchiveBucket;
+use crate::task_archives::TaskArchiveBucket;
 use futures::future::try_join_all;
 use futures::try_join;
 
@@ -93,7 +93,7 @@ pub struct Runs {
     cluster: Arc<dyn Cluster>,
     template: RunTemplate,
     box_image: String,
-    archives: ArchiveBucket,
+    task_archives: TaskArchiveBucket,
     start_lock: Mutex<()>,
 }
 
@@ -102,13 +102,13 @@ impl Runs {
         cluster: Arc<dyn Cluster>,
         template: RunTemplate,
         box_image: String,
-        archives: ArchiveBucket,
+        task_archives: TaskArchiveBucket,
     ) -> Self {
         Self {
             cluster,
             template,
             box_image,
-            archives,
+            task_archives,
             start_lock: Mutex::new(()),
         }
     }
@@ -273,7 +273,7 @@ impl Runs {
     fn fields(&self, project: &Project, new: &NewRun, now: OffsetDateTime) -> TemplateFields {
         let kube_task = kube_name(&new.task);
         let run = run_stamp(now);
-        let archive = self.archives.presign(&project.id, &new.task);
+        let archive = self.task_archives.presign(&project.id, &new.task);
         TemplateFields {
             name: kube_task,
             task: new.task.to_string(),

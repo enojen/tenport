@@ -3,12 +3,12 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use anyhow::Context;
-use tenport_server::archives::ArchiveBucket;
 use tenport_server::cluster::{Cluster, KubeCluster};
 use tenport_server::command::{self, Command, USAGE};
 use tenport_server::config::Config;
 use tenport_server::http::{self, AppState, Limiter, Limits};
 use tenport_server::runs::{RunTemplate, Runs};
+use tenport_server::task_archives::TaskArchiveBucket;
 use tenport_server::{db, logs};
 use tokio::net::TcpListener;
 use tokio::signal::unix::{Signal, SignalKind, signal};
@@ -51,11 +51,10 @@ async fn add_user(registration: tenport_server::accounts::Registration) -> anyho
 
 async fn serve() -> anyhow::Result<()> {
     let config = Config::from_env()?;
-    let bucket = config
-        .archive_bucket
-        .as_ref()
-        .context("TENPORT_BUCKET is not set: runs need a bucket for the task archives")?;
-    let archives = ArchiveBucket::open(bucket)?;
+    let bucket = config.task_archive_bucket.as_ref().context(
+        "TENPORT_TASK_ARCHIVE_BUCKET is not set: runs need the bucket of the task archives",
+    )?;
+    let task_archives = TaskArchiveBucket::open(bucket)?;
     let db = db::open(&config.database).await?;
     let cluster = KubeCluster::connect(&config.run_namespace)
         .await
@@ -65,7 +64,7 @@ async fn serve() -> anyhow::Result<()> {
         services_dir: config.run_services,
     };
     let cluster: Arc<dyn Cluster> = Arc::new(cluster);
-    let runs = Runs::new(cluster.clone(), template, config.box_image, archives);
+    let runs = Runs::new(cluster.clone(), template, config.box_image, task_archives);
     let listener = TcpListener::bind(config.listen)
         .await
         .with_context(|| format!("cannot listen on {}", config.listen))?;
