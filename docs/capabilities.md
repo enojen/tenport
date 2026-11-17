@@ -258,6 +258,16 @@ Decided (2026-11-17):
 - Tenport is open on the tailnet only, like Grafana. A public domain waits for more users.
 - The task home is a task archive in a bucket, no longer a volume (tenbox #313). The old volumes
   move to the bucket outside this plan, so Tenport does not watch volumes.
+- The box's directories come from the project id, not from its name (decided, 2026-11-18):
+  `~/wt/<project id>/main` and `~/wt/<project id>/<task>`, as the task archive key does. The
+  CLI takes the name from `tenbox.yaml` or from the checkout's directory, which can change at
+  any time, and Tenport from `POST /projects`; the two names can differ, and a run then clones
+  again next to the home it restored. The id is the same in both and never changes. The box
+  moves a restored home's one `wt/<name>/` to `wt/<project id>/` once. This is a tenbox change;
+  until it ships, Tenport fills `__PROJECT__` (the `project` label and `TENBOX_PROJECT`) with the
+  name as a label value: each character other than a letter, a digit, `-`, `_` or `.` becomes
+  `-`, at most 63 characters, ends that are not a letter or a digit cut, and the project id when
+  nothing is left.
 
 What the tenbox server and the CLI do, and where Tenport is:
 

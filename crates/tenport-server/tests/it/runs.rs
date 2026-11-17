@@ -34,6 +34,31 @@ pub async fn project_of(server: &TestServer, token: &Token) -> String {
     project["id"].as_str().unwrap().to_owned()
 }
 
+async fn project_named(server: &TestServer, token: &Token, name: &str) -> String {
+    let me: Value = reqwest::Client::new()
+        .get(server.url("/me"))
+        .bearer_auth(token.expose())
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let project: Value = reqwest::Client::new()
+        .post(server.url("/projects"))
+        .bearer_auth(token.expose())
+        .json(
+            &json!({ "org": me["organizations"][0]["id"], "name": name, "repo": "enojen/tenport" }),
+        )
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    project["id"].as_str().unwrap().to_owned()
+}
+
 pub fn build(project: &str) -> Value {
     json!({
         "project": project,
@@ -377,4 +402,32 @@ async fn a_run_is_recorded_when_the_client_leaves_before_the_answer() {
     .unwrap();
     assert_eq!(server.cluster.jobs().len(), 1);
     assert_eq!(runs.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_project_name_that_is_not_a_label_value_reaches_the_job_as_one() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let project = project_named(&server, &token, " Ödev  takibi: v2 ").await;
+
+    let response = post_run(&server, &token, &build(&project)).await;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let job = &server.cluster.jobs()[0];
+    let labels = job.metadata.labels.as_ref().unwrap();
+    assert_eq!(labels["project"], "dev-takibi-v2");
+}
+
+#[tokio::test]
+async fn a_project_name_with_no_label_character_reaches_the_job_as_its_id() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let project = project_named(&server, &token, "ğüş").await;
+
+    let response = post_run(&server, &token, &build(&project)).await;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let job = &server.cluster.jobs()[0];
+    let labels = job.metadata.labels.as_ref().unwrap();
+    assert_eq!(labels["project"], project.as_str());
 }
