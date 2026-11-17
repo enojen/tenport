@@ -15,7 +15,7 @@ crate for each program or shared library under `crates/`. Each program has its o
 |---|---|---|
 | `crates/tenport-injector` | The proxy that writes the real token into a box's request to GitHub or its tracker | `ghcr.io/enojen/tenport-injector` |
 | `crates/tenport-procs` | The sidecar of each box pod: the CPU and memory of each group of processes | `ghcr.io/enojen/tenport-procs` |
-| `crates/tenport-server` | The backend; empty modules for now, filled one by one | not yet |
+| `crates/tenport-server` | The backend, binary `tenport`: with no arguments it serves the API; `tenport user add` adds a user and prints its token once | `ghcr.io/enojen/tenport-server` |
 | `crates/tenport-run-credentials` | The request and the answer between the server and the injector | a library |
 
 The injector and procs came from the tenyard repository, where
