@@ -8,7 +8,9 @@ use k8s_openapi::api::batch::v1::Job;
 
 pub use fake::FakeCluster;
 pub use kube_api::KubeCluster;
-pub use model::{ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodName, PodState};
+pub use model::{
+    ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodName, PodState, SecretName,
+};
 
 pub trait Cluster: Send + Sync {
     fn create_job(&self, job: Job) -> BoxFuture<'_, Result<JobName, ClusterError>>;
@@ -26,4 +28,15 @@ pub trait Cluster: Send + Sync {
         read: LogRead,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>>;
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>>;
+    fn write_secret_key<'a>(
+        &'a self,
+        secret: &'a SecretName,
+        key: &'a str,
+        value: &'a str,
+    ) -> BoxFuture<'a, Result<(), ClusterError>>;
+    fn delete_secret_key<'a>(
+        &'a self,
+        secret: &'a SecretName,
+        key: &'a str,
+    ) -> BoxFuture<'a, Result<bool, ClusterError>>;
 }

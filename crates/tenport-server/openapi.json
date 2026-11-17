@@ -294,6 +294,19 @@
         ],
         "type": "object"
       },
+      "NewSecretValue": {
+        "properties": {
+          "value": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
       "Problem": {
         "properties": {
           "code": {
@@ -345,6 +358,13 @@
           "repo"
         ],
         "type": "object"
+      },
+      "ProjectSecret": {
+        "enum": [
+          "tracker_api_key",
+          "ntfy_url"
+        ],
+        "type": "string"
       },
       "Recorded": {
         "properties": {
@@ -468,6 +488,22 @@
           "class",
           "created",
           "phase"
+        ],
+        "type": "object"
+      },
+      "Secret": {
+        "properties": {
+          "changed": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/ProjectSecret"
+          }
+        },
+        "required": [
+          "name",
+          "changed"
         ],
         "type": "object"
       },
@@ -815,6 +851,207 @@
               }
             },
             "description": "The user is not an admin of the organization"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{project}/secrets": {
+      "get": {
+        "operationId": "list_secrets",
+        "parameters": [
+          {
+            "description": "The id of the project",
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Secret"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "The secrets that Tenport wrote for the project, by name: never their values"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotMember"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/projects/{project}/secrets/{name}": {
+      "delete": {
+        "operationId": "delete_secret",
+        "parameters": [
+          {
+            "description": "The id of the project",
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The name of the secret",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectSecret"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The secret is deleted from the Secret project-<project id>"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A name Tenport does not know"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The user is not an admin of the project's organization"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The project has no such secret"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "write_secret",
+        "parameters": [
+          {
+            "description": "The id of the project",
+            "in": "path",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The name of the secret",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectSecret"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewSecretValue"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Secret"
+                }
+              }
+            },
+            "description": "The secret is written to the Secret project-<project id>; Tenport keeps no copy and gives back only its name"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A name Tenport does not know, or a value that is empty or too long"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The user is not an admin of the project's organization"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"

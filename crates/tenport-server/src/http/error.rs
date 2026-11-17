@@ -128,9 +128,10 @@ impl From<PathRejection> for HttpError {
 impl From<ProjectsError> for HttpError {
     fn from(error: ProjectsError) -> Self {
         match error {
-            ProjectsError::NotAdmin { .. } | ProjectsError::NotMember { .. } => {
-                Self::Forbidden(error.to_string())
-            }
+            ProjectsError::NotAdmin { .. }
+            | ProjectsError::NotMember { .. }
+            | ProjectsError::NotProjectAdmin { .. } => Self::Forbidden(error.to_string()),
+            ProjectsError::SecretNotSet { .. } => Self::NotFound(error.to_string()),
             other => Self::internal(other),
         }
     }

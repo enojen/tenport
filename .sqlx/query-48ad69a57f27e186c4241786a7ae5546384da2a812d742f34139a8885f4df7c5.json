@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "select secret as \"secret: _\", changed_at as \"changed: _\"\n           from project_secrets where project_id = ? and secret = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "secret: _",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_secrets",
+            "name": "secret"
+          }
+        }
+      },
+      {
+        "name": "changed: _",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_secrets",
+            "name": "changed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "48ad69a57f27e186c4241786a7ae5546384da2a812d742f34139a8885f4df7c5"
+}

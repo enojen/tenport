@@ -37,6 +37,7 @@ impl TestServer {
         let runs = runs_on(cluster.clone());
         let app = router(AppState {
             db: db.clone(),
+            cluster: cluster.clone(),
             runs: Arc::new(runs),
             limiter: Arc::new(Limiter::new(limits)),
         });

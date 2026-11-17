@@ -249,8 +249,8 @@ Decided (2026-11-17):
 - A project Secret (the tracker key, the ntfy URL) goes from the admin's CLI to Tenport, and
   Tenport writes it to the Secret `project-<project id>`. Tenport keeps no copy: not in its
   database, not in a log. The API only writes a Secret and never gives it back; it tells only
-  that it is there and when it changed. Only an organization admin may write one. k3s gets
-  `secrets-encryption`, so the Secrets are encrypted on disk.
+  that it is there and when it changed. Only an organization admin may write one. k3s has
+  `secrets-encryption` (tenyard #127), so the Secrets are encrypted on disk.
 - While both servers run, Tenport's Jobs have their own label,
   `app.kubernetes.io/managed-by: tenport` in place of `app: tenyard`, and their template sends the
   injector to Tenport, so the tenbox server never touches them. Every box pod has the label
@@ -268,7 +268,7 @@ What the tenbox server and the CLI do, and where Tenport is:
 | `project add` command: a repository joins an organization as a project | Done as `POST /projects` and `GET /projects` |
 | `POST /events`: takes the task events; an id that comes twice is stored once | Done; the CLI sends `task.started` and `task.closed` |
 | The CLI starts, follows, stops and deletes the Jobs with a kubeconfig | Steps 3 and 6 |
-| The CLI writes the project Secret before each Job | Step 4 |
+| The CLI writes the project Secret before each Job | Step 4: `PUT /projects/{project}/secrets/{name}`; the CLI stops in step 6 |
 | The CLI makes the presigned links of the bucket archive, with the bucket keys on the computer | Step 4 |
 | `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Step 4 |
 | A placeholder Secret for each new Job | Step 4 |
@@ -310,11 +310,20 @@ The steps, in order:
      seconds. When the Job is gone, 409 with the code `job-gone`: asking again does not help.
    - Deleting a task moves to step 4: with no task volumes, a task has only its bucket archive
      to delete, and that needs the bucket keys of step 4.
-4. Next, after k3s gets `secrets-encryption` (planned on its own first). What a run needs
-   comes from Tenport: the project Secrets, the presigned links of the bucket
-   archive (the bucket keys in Tenport's env), the GitHub App token, the placeholder Secret and
-   `POST /run-credentials`. Deleting a task, which deletes its bucket archive (the CLI's
-   `machine rm`).
+4. Now; k3s has `secrets-encryption` (tenyard #127). What a run needs comes from Tenport: the
+   project Secrets, the presigned links of the bucket archive (the bucket keys in Tenport's
+   env), the GitHub App token, the placeholder Secret and `POST /run-credentials`. Deleting a
+   task, which deletes its bucket archive (the CLI's `machine rm`). One PR for each, in this
+   order.
+   - The project Secrets: `PUT /projects/{project}/secrets/{name}` with `{"value": ...}`,
+     `DELETE /projects/{project}/secrets/{name}`, and `GET /projects/{project}/secrets`, which
+     gives each `name` and when it `changed`, never a value. A name is `tracker_api_key` or
+     `ntfy_url`, the keys the Job template reads. Their events are `project.secret_changed` and
+     `project.secret_deleted`, with the name only. Until step 6 the CLI still writes the whole
+     Secret before each of its Jobs, with the values of the computer.
+   - Deleting a task: `DELETE /tasks/{task}?project=<id>`, with the event `task.deleted`.
+   - Tenport's Jobs send their placeholders to an injector of their own, which asks Tenport;
+     the injector of the tenbox server stays as it is until step 11.
 5. The runs: `run.finished`, so `GET /runs?project=<id>&task=<id>` and `GET /runs/{name}` keep
    the phase after the Job is deleted. `run.finished` also keeps the JSON result of the tenbox
    command (the last JSON line of the box log) as `output`, and `GET /runs/{name}` gives it. An

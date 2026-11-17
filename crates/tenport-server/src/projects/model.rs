@@ -1,6 +1,11 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
+use utoipa::ToSchema;
 
 use crate::accounts::OrgId;
+use crate::cluster::SecretName;
 use crate::id::short_id;
 use crate::name::{Name, parsed_text};
 
@@ -57,19 +62,28 @@ pub struct Project {
 pub enum ProjectsEvent {
     #[serde(rename = "project.added")]
     ProjectAdded(ProjectAdded),
+    #[serde(rename = "project.secret_changed")]
+    SecretChanged(SecretChanged),
+    #[serde(rename = "project.secret_deleted")]
+    SecretDeleted(SecretDeleted),
 }
 
 impl ProjectsEvent {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::ProjectAdded(_) => "project.added",
+            Self::SecretChanged(_) => "project.secret_changed",
+            Self::SecretDeleted(_) => "project.secret_deleted",
         }
     }
 
     pub fn subject(&self) -> String {
-        match self {
-            Self::ProjectAdded(added) => format!("project:{}", added.id),
-        }
+        let project = match self {
+            Self::ProjectAdded(added) => &added.id,
+            Self::SecretChanged(changed) => &changed.project,
+            Self::SecretDeleted(deleted) => &deleted.project,
+        };
+        format!("project:{project}")
     }
 }
 
@@ -90,4 +104,88 @@ impl From<ProjectAdded> for Project {
             repo: added.repo,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum ProjectSecret {
+    TrackerApiKey,
+    NtfyUrl,
+}
+
+impl ProjectSecret {
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::TrackerApiKey => "tracker_api_key",
+            Self::NtfyUrl => "ntfy_url",
+        }
+    }
+}
+
+impl fmt::Display for ProjectSecret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.key())
+    }
+}
+
+pub fn kube_secret_of(project: &ProjectId) -> SecretName {
+    SecretName::new(format!("project-{project}"))
+}
+
+const MAX_SECRET_VALUE_LENGTH: usize = 4096;
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "String")]
+pub struct SecretValue(String);
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("a secret value is 1 to {MAX_SECRET_VALUE_LENGTH} characters")]
+pub struct SecretValueError;
+
+impl SecretValue {
+    pub fn parse(raw: &str) -> Result<Self, SecretValueError> {
+        let length = raw.chars().count();
+        if (1..=MAX_SECRET_VALUE_LENGTH).contains(&length) {
+            Ok(Self(raw.to_owned()))
+        } else {
+            Err(SecretValueError)
+        }
+    }
+
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for SecretValue {
+    type Error = SecretValueError;
+
+    fn try_from(raw: String) -> Result<Self, SecretValueError> {
+        Self::parse(&raw)
+    }
+}
+
+impl fmt::Debug for SecretValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SecretValue(hidden)")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecretChanged {
+    pub project: ProjectId,
+    pub secret: ProjectSecret,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecretDeleted {
+    pub project: ProjectId,
+    pub secret: ProjectSecret,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SecretState {
+    pub secret: ProjectSecret,
+    pub changed: OffsetDateTime,
 }

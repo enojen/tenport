@@ -117,3 +117,18 @@ fn the_newest_pod_is_the_one_read() {
     let newest = newest_pod(pods).unwrap();
     assert_eq!(newest.metadata.name.as_deref(), Some("new"));
 }
+
+#[test]
+fn a_new_secret_is_opaque_and_holds_only_the_written_key() {
+    let secret = new_secret(
+        &SecretName::new("project-abc123"),
+        "ntfy_url",
+        "https://n/x",
+    );
+    assert_eq!(secret.metadata.name.as_deref(), Some("project-abc123"));
+    assert_eq!(secret.type_.as_deref(), Some("Opaque"));
+    assert_eq!(
+        secret.string_data,
+        Some([("ntfy_url".to_owned(), "https://n/x".to_owned())].into())
+    );
+}

@@ -6,4 +6,5 @@ mod http;
 mod openapi;
 mod projects;
 mod runs;
+mod secrets;
 mod server;
