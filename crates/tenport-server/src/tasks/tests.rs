@@ -1,34 +1,9 @@
 use super::*;
-use crate::accounts::{self, GithubLogin, NewUser, Registered, Registration, Role};
+use crate::accounts::Role;
 use crate::db;
+use crate::fixtures::{project_of, register};
 use crate::name::Name;
-use crate::projects::{NewProject, Repo};
 use crate::tracker::TrackerUrl;
-
-async fn register(db: &Db, org: &str, github: &str) -> Registered {
-    let registration = Registration {
-        org: Name::parse(org).unwrap(),
-        user: NewUser {
-            name: Name::parse(github).unwrap(),
-            email: None,
-            github: GithubLogin::parse(github).unwrap(),
-        },
-        role: Role::Admin,
-        token_name: Name::parse("laptop").unwrap(),
-    };
-    accounts::register(db, Actor::Server, registration)
-        .await
-        .unwrap()
-}
-
-async fn project_of(db: &Db, owner: &Registered) -> ProjectId {
-    let new = NewProject {
-        org: owner.org.clone(),
-        name: Name::parse("Tenport").unwrap(),
-        repo: Repo::parse("enojen/tenport").unwrap(),
-    };
-    projects::add(db, &owner.user, new).await.unwrap().id
-}
 
 fn started(project: &ProjectId, task: &str) -> Reported {
     reported(TasksEvent::TaskStarted(TaskStarted {
@@ -63,7 +38,7 @@ async fn open_tasks(db: &Db) -> i64 {
 #[tokio::test]
 async fn a_started_task_is_open_until_it_is_closed() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     record_events(&db, &owner.user, vec![started(&project, "TEN-1")])
         .await
@@ -78,7 +53,7 @@ async fn a_started_task_is_open_until_it_is_closed() {
 #[tokio::test]
 async fn the_same_events_sent_again_are_skipped() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let batch = vec![started(&project, "TEN-1"), closed(&project, "TEN-1")];
     let first = record_events(&db, &owner.user, batch.clone())
@@ -104,7 +79,7 @@ async fn the_same_events_sent_again_are_skipped() {
 #[tokio::test]
 async fn closing_a_task_that_never_started_is_refused() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let error = record_events(&db, &owner.user, vec![closed(&project, "TEN-1")])
         .await
@@ -124,7 +99,7 @@ async fn closing_a_task_that_never_started_is_refused() {
 #[tokio::test]
 async fn an_open_task_is_not_started_again() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     record_events(&db, &owner.user, vec![started(&project, "TEN-1")])
         .await
@@ -147,7 +122,7 @@ async fn an_open_task_is_not_started_again() {
 #[tokio::test]
 async fn a_closed_task_starts_again() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let first_round = vec![started(&project, "TEN-1"), closed(&project, "TEN-1")];
     record_events(&db, &owner.user, first_round).await.unwrap();
@@ -164,7 +139,7 @@ async fn a_closed_task_starts_again() {
 #[tokio::test]
 async fn a_refused_event_leaves_the_whole_batch_out() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let batch = vec![started(&project, "TEN-1"), closed(&project, "TEN-2")];
     record_events(&db, &owner.user, batch).await.unwrap_err();
@@ -174,14 +149,14 @@ async fn a_refused_event_leaves_the_whole_batch_out() {
 #[tokio::test]
 async fn only_a_member_of_the_organization_reports_its_tasks() {
     let (db, _dir) = db::temp().await;
-    let owner = register(&db, "Wegobi", "enojen").await;
-    let stranger = register(&db, "Other", "ali").await;
+    let owner = register(&db, "Wegobi", "enojen", Role::Admin).await;
+    let stranger = register(&db, "Other", "ali", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let error = record_events(&db, &stranger.user, vec![started(&project, "TEN-1")])
         .await
         .unwrap_err();
     assert!(
-        matches!(&error, TasksError::NotMember { project: refused } if *refused == project),
+        matches!(&error, TasksError::Projects(ProjectsError::NotMember { project: refused }) if *refused == project),
         "{error}"
     );
     assert_eq!(open_tasks(&db).await, 0);

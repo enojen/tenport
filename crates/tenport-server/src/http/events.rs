@@ -9,6 +9,7 @@ use super::AppState;
 use super::auth::CurrentUser;
 use super::error::{HttpError, PROBLEM_JSON, Problem};
 use crate::events::{EventId, EventsError};
+use crate::projects::ProjectsError;
 use crate::tasks::{self, Reported, TasksError, TasksEvent};
 
 #[derive(Deserialize, ToSchema)]
@@ -66,7 +67,9 @@ pub async fn record_events(
 
 fn record_error(error: TasksError) -> HttpError {
     match error {
-        TasksError::NotMember { .. } => HttpError::Forbidden(error.to_string()),
+        TasksError::Projects(ProjectsError::NotMember { .. }) => {
+            HttpError::Forbidden(error.to_string())
+        }
         TasksError::Events(EventsError::Conflict { .. } | EventsError::Refused { .. }) => {
             HttpError::Conflict(error.to_string())
         }

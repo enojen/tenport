@@ -39,8 +39,6 @@ const GITHUB: &str = "https://github.com";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunsError {
-    #[error("only a member of the organization of the project {project} sees and starts its runs")]
-    NotMember { project: ProjectId },
     #[error("Tenport does not know the run {run}")]
     NotFound { run: RunName },
     #[error("the box container of the run {run} has not started{}", reason_text(.reason))]
@@ -108,11 +106,7 @@ impl Runs {
     }
 
     pub async fn start(&self, db: &Db, user: &UserId, new: NewRun) -> Result<Run, RunsError> {
-        let project = projects::find_project_for_member(db, user, &new.project)
-            .await?
-            .ok_or_else(|| RunsError::NotMember {
-                project: new.project.clone(),
-            })?;
+        let project = projects::require_member(db, user, &new.project).await?;
         let name = self.create_job_when_idle(&project, &new).await?;
         let started = RunStarted {
             project: project.id.clone(),
@@ -154,7 +148,7 @@ impl Runs {
         project: &ProjectId,
         task: &TaskId,
     ) -> Result<Vec<RunState>, RunsError> {
-        require_member(db, user, project).await?;
+        projects::require_member(db, user, project).await?;
         let (runs, jobs) = try_join!(
             list_runs_of_task(db, project, task),
             self.list_jobs_of_task(project, task)
@@ -291,19 +285,9 @@ impl Runs {
     }
 }
 
-async fn require_member(db: &Db, user: &UserId, project: &ProjectId) -> Result<(), RunsError> {
-    if projects::is_member(db, user, project).await? {
-        Ok(())
-    } else {
-        Err(RunsError::NotMember {
-            project: project.clone(),
-        })
-    }
-}
-
 async fn find_run_for_member(db: &Db, user: &UserId, name: &RunName) -> Result<Run, RunsError> {
     let run = find_run(db, name).await?;
-    require_member(db, user, &run.project).await?;
+    projects::require_member(db, user, &run.project).await?;
     Ok(run)
 }
 

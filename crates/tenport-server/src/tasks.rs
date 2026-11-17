@@ -18,8 +18,6 @@ pub use model::{TaskClosed, TaskId, TaskIdError, TaskStarted, TasksEvent};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TasksError {
-    #[error("only a member of the organization of the project {project} reports its tasks")]
-    NotMember { project: ProjectId },
     #[error(transparent)]
     Projects(#[from] ProjectsError),
     #[error(transparent)]
@@ -44,7 +42,7 @@ pub async fn record_events(
     user: &UserId,
     reported: Vec<Reported>,
 ) -> Result<Recorded, TasksError> {
-    require_member(db, user, &reported).await?;
+    require_member_of_all(db, user, &reported).await?;
     let entries: Vec<Entry> = reported
         .into_iter()
         .map(|reported| Entry {
@@ -79,14 +77,14 @@ pub(crate) async fn apply(
     }
 }
 
-async fn require_member(db: &Db, user: &UserId, reported: &[Reported]) -> Result<(), TasksError> {
+async fn require_member_of_all(
+    db: &Db,
+    user: &UserId,
+    reported: &[Reported],
+) -> Result<(), TasksError> {
     let projects: HashSet<&ProjectId> = reported.iter().map(|r| r.event.project()).collect();
     for project in projects {
-        if !projects::is_member(db, user, project).await? {
-            return Err(TasksError::NotMember {
-                project: project.clone(),
-            });
-        }
+        projects::require_member(db, user, project).await?;
     }
     Ok(())
 }
