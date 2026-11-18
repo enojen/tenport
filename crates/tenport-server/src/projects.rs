@@ -202,11 +202,8 @@ async fn require_admin(
     user: &UserId,
     organization: &OrganizationId,
 ) -> Result<(), ProjectsError> {
-    let memberships = accounts::memberships(db, user).await?;
-    let is_admin = memberships.iter().any(|membership| {
-        membership.organization == *organization && membership.role == Role::Admin
-    });
-    if is_admin {
+    let role = accounts::find_role(db, organization, user).await?;
+    if role == Some(Role::Admin) {
         Ok(())
     } else {
         Err(ProjectsError::NotAdmin {

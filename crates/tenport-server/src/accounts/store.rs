@@ -1,7 +1,7 @@
 use sqlx::SqliteConnection;
 
 use super::model::{
-    MemberAdded, Membership, OrganizationAdded, OrganizationId, TokenAdded, TokenHash, User,
+    MemberAdded, Membership, OrganizationAdded, OrganizationId, Role, TokenAdded, TokenHash, User,
     UserAdded, UserId,
 };
 use crate::events::Stamp;
@@ -124,5 +124,19 @@ pub async fn list_memberships_of_user(
         user,
     )
     .fetch_all(conn)
+    .await
+}
+
+pub async fn find_role_of_user(
+    conn: &mut SqliteConnection,
+    organization: &OrganizationId,
+    user: &UserId,
+) -> Result<Option<Role>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"select role as "role: Role" from memberships where organization_id = ? and user_id = ?"#,
+        organization,
+        user,
+    )
+    .fetch_optional(conn)
     .await
 }

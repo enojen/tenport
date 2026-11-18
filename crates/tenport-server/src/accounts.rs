@@ -92,6 +92,15 @@ pub async fn memberships(db: &Db, user: &UserId) -> Result<Vec<Membership>, Acco
     Ok(store::list_memberships_of_user(&mut conn, user).await?)
 }
 
+pub async fn find_role(
+    db: &Db,
+    organization: &OrganizationId,
+    user: &UserId,
+) -> Result<Option<Role>, AccountsError> {
+    let mut conn = db.acquire().await?;
+    Ok(store::find_role_of_user(&mut conn, organization, user).await?)
+}
+
 pub(crate) async fn apply(
     conn: &mut SqliteConnection,
     event: &AccountsEvent,
