@@ -126,7 +126,7 @@ pub(crate) async fn apply(
     Ok(())
 }
 
-async fn find_organization_id(
+pub(crate) async fn find_organization_id(
     db: &Db,
     name: &Name,
 ) -> Result<Option<OrganizationId>, AccountsError> {
@@ -155,13 +155,4 @@ fn add_user_error(error: EventsError, github: GithubLogin) -> AccountsError {
 
 fn expose_token<S: serde::Serializer>(token: &Token, serializer: S) -> Result<S::Ok, S::Error> {
     serializer.serialize_str(token.expose())
-}
-
-#[cfg(test)]
-pub(crate) async fn organization_id(db: &Db, name: &str) -> Option<OrganizationId> {
-    let mut conn = db.acquire().await.unwrap();
-    let name = Name::parse(name).unwrap();
-    store::find_organization_id_by_name(&mut conn, &name)
-        .await
-        .unwrap()
 }

@@ -26,3 +26,11 @@ pub async fn project_of(db: &Db, owner: &AddedUser) -> ProjectId {
     };
     projects::add(db, &owner.user, new).await.unwrap().id
 }
+
+pub async fn organization_exists(db: &Db, name: &str) -> bool {
+    let name = Name::parse(name).unwrap();
+    accounts::find_organization_id(db, &name)
+        .await
+        .unwrap()
+        .is_some()
+}

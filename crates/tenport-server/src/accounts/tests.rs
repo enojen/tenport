@@ -1,6 +1,6 @@
 use super::*;
-use crate::db;
 use crate::name::Name;
+use crate::{db, fixtures};
 
 fn new_user(organization: &str, github: &str) -> NewUser {
     NewUser {
@@ -60,7 +60,7 @@ async fn refuses_a_github_login_that_exists_and_writes_nothing() {
         matches!(&error, AccountsError::UserExists { github } if github.as_str() == "enojen"),
         "{error}"
     );
-    assert!(organization_id(&db, "Other").await.is_none());
+    assert!(!fixtures::organization_exists(&db, "Other").await);
 }
 
 #[tokio::test]

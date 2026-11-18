@@ -2,8 +2,8 @@ use serde_json::Value;
 
 use super::*;
 use crate::accounts::{AccountsEvent, OrganizationAdded, OrganizationId};
-use crate::db;
 use crate::name::Name;
+use crate::{db, fixtures};
 
 fn organization_added(name: &str) -> Event {
     Event::Accounts(AccountsEvent::OrganizationAdded(OrganizationAdded {
@@ -40,7 +40,7 @@ async fn writes_the_event_and_its_table_together() {
     assert_eq!(row.kind, "organization.added");
     assert_eq!(row.subject, event.subject());
     assert_eq!(row.actor, "server");
-    assert!(accounts::organization_id(&db, "Wegobi").await.is_some());
+    assert!(fixtures::organization_exists(&db, "Wegobi").await);
 }
 
 #[tokio::test]
@@ -88,7 +88,7 @@ async fn the_same_id_with_other_content_is_a_conflict() {
         matches!(error, EventsError::Conflict { id } if id == first.id),
         "{error}"
     );
-    assert!(accounts::organization_id(&db, "Other").await.is_none());
+    assert!(!fixtures::organization_exists(&db, "Other").await);
 }
 
 #[tokio::test]
@@ -123,5 +123,5 @@ async fn a_batch_is_written_whole_or_not_at_all() {
     .unwrap_err();
     assert!(error.violates_unique("organizations.name"), "{error}");
     assert_eq!(events_in(&db).await, 0);
-    assert!(accounts::organization_id(&db, "Wegobi").await.is_none());
+    assert!(!fixtures::organization_exists(&db, "Wegobi").await);
 }
