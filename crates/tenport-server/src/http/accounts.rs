@@ -1,12 +1,18 @@
 use axum::extract::State;
 use serde::Serialize;
 use utoipa::ToSchema;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 
 use super::AppState;
 use super::auth::CurrentUser;
-use super::error::{HttpError, TooManyRequests, Unauthorized, Unavailable};
+use super::error::HttpError;
 use super::extract::Json;
 use crate::accounts::{self, Role};
+
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(me))
+}
 
 #[derive(Serialize, ToSchema)]
 pub struct Me {
@@ -30,9 +36,6 @@ pub struct MyOrganization {
     security(("bearer" = [])),
     responses(
         (status = OK, description = "The user of the token and their organizations", body = Me),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
     ),
 )]
 pub async fn me(

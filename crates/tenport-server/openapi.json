@@ -11,6 +11,26 @@
         },
         "description": "The user is not a member of the project's organization"
       },
+      "NotProjectAdmin": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "The user is not an admin of the project's organization"
+      },
+      "RunNotFound": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "Tenport does not know the run"
+      },
       "TooManyRequests": {
         "content": {
           "application/problem+json": {
@@ -1075,14 +1095,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The user is not an admin of the project's organization"
+            "$ref": "#/components/responses/NotProjectAdmin"
           },
           "404": {
             "content": {
@@ -1164,14 +1177,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The user is not an admin of the project's organization"
+            "$ref": "#/components/responses/NotProjectAdmin"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -1438,14 +1444,7 @@
             "$ref": "#/components/responses/NotMember"
           },
           "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Tenport does not know the run"
+            "$ref": "#/components/responses/RunNotFound"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -1491,14 +1490,7 @@
             "$ref": "#/components/responses/NotMember"
           },
           "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Tenport does not know the run"
+            "$ref": "#/components/responses/RunNotFound"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -1554,14 +1546,7 @@
             "$ref": "#/components/responses/NotMember"
           },
           "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Tenport does not know the run"
+            "$ref": "#/components/responses/RunNotFound"
           },
           "409": {
             "content": {

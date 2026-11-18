@@ -1,17 +1,21 @@
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 
 use super::AppState;
 use super::auth::CurrentUser;
-use super::error::{
-    HttpError, NotMember, PROBLEM_JSON, Problem, TooManyRequests, Unauthorized, Unavailable,
-};
+use super::error::{HttpError, NotMember, PROBLEM_JSON, Problem};
 use super::extract::{Json, Path, Query};
+use crate::events::EventsError;
 use crate::projects::ProjectId;
-use crate::runs::RunsError;
 use crate::task_archives::TaskArchiveState;
 use crate::tasks::{self, TaskId, TasksError};
+
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(delete_task))
+}
 
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
@@ -36,9 +40,6 @@ pub struct DeletedTask {
     responses(
         (status = OK, description = "The task is deleted. `archive` is `deleted`, or `missing` when the bucket had no task archive, so a second delete is safe", body = DeletedTask),
         (status = BAD_REQUEST, description = "Not a task id or a project id", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
         (status = FORBIDDEN, response = NotMember),
         (status = CONFLICT, description = "A Job of the task still runs (code machine-busy); nothing is deleted", body = Problem, content_type = PROBLEM_JSON),
     ),
@@ -57,8 +58,7 @@ pub async fn delete_task(
         &query.project,
         &task,
     )
-    .await
-    .map_err(delete_error)?;
+    .await?;
     Ok(Json(DeletedTask {
         project: query.project.to_string(),
         task: task.to_string(),
@@ -66,10 +66,16 @@ pub async fn delete_task(
     }))
 }
 
-fn delete_error(error: TasksError) -> HttpError {
-    match error {
-        TasksError::Projects(error) => error.into(),
-        TasksError::Runs(RunsError::Busy { .. }) => HttpError::MachineBusy(error.to_string()),
-        other => HttpError::internal(other),
+impl From<TasksError> for HttpError {
+    fn from(error: TasksError) -> Self {
+        match error {
+            TasksError::Projects(error) => error.into(),
+            TasksError::Runs(error) => error.into(),
+            TasksError::EventNotAllowed { .. } => Self::BadRequest(error.to_string()),
+            TasksError::Events(EventsError::Conflict { .. } | EventsError::Refused { .. }) => {
+                Self::Conflict(error.to_string())
+            }
+            other => Self::internal(other),
+        }
     }
 }

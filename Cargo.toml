@@ -11,7 +11,7 @@ license-file = "LICENSE"
 [workspace.dependencies]
 tenport-run-credentials = { path = "crates/tenport-run-credentials" }
 anyhow = "1.0.104"
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["macros"] }
 base64 = "0.22.1"
 futures = "0.3.34"
 hex = "0.4.3"
