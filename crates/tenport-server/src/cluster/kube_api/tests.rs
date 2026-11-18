@@ -52,7 +52,6 @@ fn a_job_with_no_counts_is_running() {
     assert_eq!(state.phase, JobPhase::Running);
     assert_eq!(state.name.as_str(), "task-ten-1-1117-101500");
     assert_eq!(state.labels.get("task").map(String::as_str), Some("TEN-1"));
-    assert_eq!(state.created.unix_timestamp(), 1_700_000_000);
 }
 
 #[test]

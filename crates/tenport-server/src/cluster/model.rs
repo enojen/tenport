@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::pin::Pin;
 
 use futures::AsyncBufRead;
-use time::OffsetDateTime;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct JobName(String);
@@ -74,7 +73,6 @@ pub struct JobState {
     pub name: JobName,
     pub uid: JobUid,
     pub labels: BTreeMap<String, String>,
-    pub created: OffsetDateTime,
     pub phase: JobPhase,
     pub failed_reason: Option<String>,
 }

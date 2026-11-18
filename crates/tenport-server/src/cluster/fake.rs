@@ -8,7 +8,6 @@ use futures::FutureExt;
 use futures::future::{BoxFuture, ready};
 use futures::io::{AsyncRead, AsyncReadExt, BufReader, Cursor};
 use k8s_openapi::api::batch::v1::Job;
-use time::OffsetDateTime;
 
 use super::Cluster;
 use super::model::{
@@ -28,7 +27,6 @@ pub struct FakeCluster {
 
 struct FakeJob {
     job: Job,
-    created: OffsetDateTime,
     phase: JobPhase,
     failed_reason: Option<String>,
     pod: Option<FakePod>,
@@ -130,7 +128,6 @@ impl FakeCluster {
         }
         let fake = FakeJob {
             job,
-            created: OffsetDateTime::now_utc(),
             phase: JobPhase::Running,
             failed_reason: None,
             pod: None,
@@ -264,7 +261,6 @@ fn job_state(name: &JobName, fake: &FakeJob) -> JobState {
         name: name.clone(),
         uid: FakeCluster::uid_of(name),
         labels: fake.job.metadata.labels.clone().unwrap_or_default(),
-        created: fake.created,
         phase: fake.phase,
         failed_reason: fake.failed_reason.clone(),
     }

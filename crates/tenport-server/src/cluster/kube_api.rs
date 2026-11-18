@@ -8,7 +8,6 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference}
 use kube::api::{DeleteParams, ListParams, LogParams, Patch, PatchParams, PostParams};
 use kube::{Api, Client};
 use serde_json::{Value, json};
-use time::OffsetDateTime;
 
 use super::Cluster;
 use super::model::{
@@ -282,12 +281,10 @@ fn status_code(error: &kube::Error) -> Option<u16> {
 fn job_state(job: &Job) -> Option<JobState> {
     let name = JobName::new(job.metadata.name.clone()?);
     let uid = JobUid::new(job.metadata.uid.clone()?);
-    let created = to_offset_date_time(job.metadata.creation_timestamp.as_ref()?.0)?;
     Some(JobState {
         name,
         uid,
         labels: job.metadata.labels.clone().unwrap_or_default(),
-        created,
         phase: job_phase(job),
         failed_reason: job_failed_reason(job),
     })
@@ -324,10 +321,6 @@ fn job_phase(job: &Job) -> JobPhase {
         return JobPhase::Failed;
     }
     JobPhase::Running
-}
-
-fn to_offset_date_time(timestamp: k8s_openapi::jiff::Timestamp) -> Option<OffsetDateTime> {
-    OffsetDateTime::from_unix_timestamp_nanos(timestamp.as_nanosecond()).ok()
 }
 
 fn newest_pod(pods: Vec<Pod>) -> Option<Pod> {
