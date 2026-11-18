@@ -1,7 +1,6 @@
 mod fake;
 mod kube_api;
 mod model;
-mod nodes;
 
 use futures::future::BoxFuture;
 use k8s_openapi::api::batch::v1::Job;
