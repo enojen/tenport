@@ -252,8 +252,10 @@ Decided (2026-11-17):
   that it is there and when it changed. Only an organization admin may write one. k3s has
   `secrets-encryption` (tenyard #127), so the Secrets are encrypted on disk.
 - While both servers run, Tenport's Jobs have their own label,
-  `app.kubernetes.io/managed-by: tenport` in place of `app: tenyard`, and their template sends the
-  injector to Tenport, so the tenbox server never touches them. Every box pod has the label
+  `app.kubernetes.io/managed-by: tenport` in place of `app: tenyard`, so the tenbox server never
+  touches them. The one egress proxy's injector asks Tenport (decided, 2026-11-18, tenyard
+  #131), so a Job of the CLI, whose placeholder the tenbox server writes, has no GitHub until
+  step 6. A second proxy would keep the CLI's Jobs working only for that time. Every box pod has the label
   `box: "true"`, and Tetragon and the process metrics select it, so they see the boxes of both.
 - Tenport is open on the tailnet only, like Grafana. A public domain waits for more users.
 - The task home is a task archive in a bucket, no longer a volume (tenbox #313). The old volumes
@@ -278,10 +280,10 @@ What the tenbox server and the CLI do, and where Tenport is:
 | `project add` command: a repository joins an organization as a project | Done as `POST /projects` and `GET /projects` |
 | `POST /events`: takes the task events; an id that comes twice is stored once | Done; the CLI sends `task.started` and `task.closed` |
 | The CLI starts, follows, stops and deletes the Jobs with a kubeconfig | Steps 3 and 6 |
-| The CLI writes the Secret `project-<project id>` before each Job | Step 4: `PUT /projects/{project}/secrets/{name}`; the CLI stops in step 6 |
-| The CLI makes the presigned links of the task archive, with the bucket keys on the computer | Step 4: Tenport makes them for its own Jobs; the CLI stops in step 6 |
-| `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Step 4 |
-| A placeholder Secret for each new Job | Step 4 |
+| The CLI writes the Secret `project-<project id>` before each Job | Done as `PUT /projects/{project}/secrets/{name}`; the CLI stops in step 6 |
+| The CLI makes the presigned links of the task archive, with the bucket keys on the computer | Done: Tenport makes them for its own Jobs; the CLI stops in step 6 |
+| `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Done |
+| A placeholder Secret for each new Job | Done |
 | `run.finished` when a box container ends, with the OOM count and the close output from the pod log | Step 5 |
 | `GET /tasks/{task}/runs`: the runs of a task | Step 5 |
 | Nodes, every 30 seconds: a worker that comes or goes, with its Hetzner type and hourly price | Step 8 |
@@ -320,7 +322,7 @@ The steps, in order:
      seconds. When the Job is gone, 409 with the code `job-gone`: asking again does not help.
    - Deleting a task moves to step 4: with no task volumes, a task has only its task archive
      to delete, and that needs the bucket keys of step 4.
-4. Now; k3s has `secrets-encryption` (tenyard #127). What a run needs comes from Tenport: the
+4. Done (2026-11-18); k3s has `secrets-encryption` (tenyard #127). What a run needs comes from Tenport: the
    project secrets, the presigned links of the task archive (the bucket keys in Tenport's
    env), the GitHub App token, the placeholder Secret and `POST /run-credentials`. Deleting a
    task, which deletes its task archive (the CLI's `machine rm`). One PR for each, in this
@@ -336,21 +338,19 @@ The steps, in order:
      `TENPORT_TASK_ARCHIVE_BUCKET_KEY_FILE` and `TENPORT_TASK_ARCHIVE_BUCKET_SECRET_FILE`, and
      does not serve without them. Each Job gets a GET and a PUT link to
      `tasks/<project id>/<task>.tar.zst`, good for 24 hours, the same object and the same time
-     as the CLI's; a Job ends after 8 hours at most.
+     as the CLI's; a Job ends after 8 hours at most. Done: tenport #32, tenyard #129.
    - Deleting a task: `DELETE /tasks/{task}?project=<id>`, with the event `task.deleted`. A
      member of the project's organization may delete, as with `machine rm`. It answers 409
      `machine-busy` while a Job of the task runs, and deletes nothing. Else it deletes the task
      archive and the task's row, and answers `archive`: `deleted`, or `missing` when the bucket
      had none, so a second delete is safe. Only Tenport writes `task.deleted`: `POST /events`
      refuses it with 400. Tenport sends the HEAD and the DELETE to the bucket itself, with
-     the Mozilla roots built in, as its image has no CA files.
-   - Tenport's Jobs send their placeholders to an injector of their own, which asks Tenport;
-     the injector of the tenbox server stays as it is until step 11.
+     the Mozilla roots built in, as its image has no CA files. Done: tenport #34.
    - The placeholder (4a): right after a Job is created, Tenport writes the Secret
      `<job>-github` with `token`, the placeholder `tbxph_` and the base64url HMAC-SHA256 of the
      Job's uid under the key of `TENPORT_RUN_CREDENTIAL_KEY_FILE`, the same as the tenbox
      server's. The Job owns the Secret, so Kubernetes deletes it with the Job. When the write
-     fails, Tenport deletes the Job. Tenport does not serve without the key.
+     fails, Tenport deletes the Job. Tenport does not serve without the key. Done: tenport #36.
    - `POST /run-credentials` (4b): the injector sends `{placeholder, host}` with the injector
      token of `TENPORT_INJECTOR_TOKEN_FILE` and gets `{ok, value}`, the one-hour token of the
      GitHub App (`TENPORT_GITHUB_APP_ID`, `TENPORT_GITHUB_APP_KEY_FILE`) for the repository of
@@ -359,10 +359,13 @@ The steps, in order:
      `api.github.com`. 404 for any other placeholder or host, or when the App is not installed
      on the repository; 401 without the injector token. Tenport keeps the token of each open Job
      and makes a new one 5 minutes before it ends. The answer is `{value}`: Tenport's answers
-     have no `ok`, and the injector reads only `value`.
-   - tenyard (4c): `egress/proxy-tenport`, the same injector image asking Tenport; Tenport's run
-     template points `HTTPS_PROXY` at it. The App key is the same; the placeholder key and the
-     injector token are new values, so neither server can use the other's.
+     have no `ok`, and the injector reads only `value`. Done: tenport #37.
+   - tenyard (4c): the injector of the egress proxy asks Tenport, with Tenport's injector
+     token. The App key is the same; the placeholder key and the injector token are new
+     values, so neither server can use the other's. Done: tenyard #131, with a real run from
+     the live Tenport (tenport 59eb6df): `start`, `approve` and `build` of a task of
+     `enojen/tenbox-demo` cloned the private repository, pushed its branch and opened a draft
+     PR as the App (tenbox-demo #20).
 5. The runs: `run.finished`, so `GET /runs?project=<id>&task=<id>` and `GET /runs/{name}` keep
    the phase after the Job is deleted. `run.finished` also keeps the JSON result of the tenbox
    command (the last JSON line of the box log) as `output`, and `GET /runs/{name}` gives it. An
@@ -375,6 +378,10 @@ The steps, in order:
      cannot start, such as with `CreateContainerConfigError`, because that reason does not
      go away alone. The 409 `box-not-started` carries the reason, so the CLI can stop on a
      reason that is an error and show it.
+   - To decide here: one project has two ids today. `tenbox.yaml` holds the CLI's
+     (`tenbox-demo`: `rw68a5`), and Tenport made its own at `POST /projects` (`7ihtah`). The
+     task archive key and the box's directories come from the id, so the CLI and Tenport
+     would use two archives for one task.
 7. The agent in a box reaches Tenport from inside the cluster with a run token that starts runs
    in its own project only, with a limit on nested runs and on open runs at one time.
 8. The cluster watch: nodes, with their Hetzner type and price.
