@@ -6,34 +6,26 @@ use axum::routing::get;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
-use utoipa_axum::routes;
 
 use super::AppState;
 use super::error::HttpError;
 use super::extract::Json;
 use super::limits::limit_requests;
 use super::openapi::{ApiDoc, document};
-use super::{accounts, events, health, projects, run_credentials, runs, tasks};
+use super::{accounts, health, projects, run_credentials, runs, tasks};
 
 pub fn router(state: AppState) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
-        .routes(routes!(health::health))
-        .routes(routes!(accounts::me))
-        .routes(routes!(projects::add_project, projects::list_projects))
-        .routes(routes!(projects::write_secret, projects::delete_secret))
-        .routes(routes!(projects::list_secrets))
-        .routes(routes!(events::record_events))
-        .routes(routes!(runs::start_run, runs::list_runs))
-        .routes(routes!(runs::find_run, runs::stop_run))
-        .routes(routes!(runs::read_log))
-        .routes(routes!(tasks::delete_task))
-        .routes(routes!(run_credentials::run_credential))
+        .merge(health::routes())
+        .merge(accounts::routes())
+        .merge(projects::routes())
+        .merge(runs::routes())
+        .merge(tasks::routes())
+        .merge(run_credentials::routes())
         .split_for_parts();
+    let document = document(api);
     router
-        .route(
-            "/openapi.json",
-            get(move || async move { Json(document(&api)) }),
-        )
+        .route("/openapi.json", get(move || async move { Json(document) }))
         .fallback(no_route)
         .method_not_allowed_fallback(no_method)
         .layer(DefaultBodyLimit::max(state.limiter.limits().body_bytes))

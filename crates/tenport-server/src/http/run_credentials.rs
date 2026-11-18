@@ -1,13 +1,19 @@
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 
 use super::AppState;
 use super::auth::Injector;
-use super::error::{HttpError, PROBLEM_JSON, Problem, TooManyRequests, Unavailable};
+use super::error::{HttpError, PROBLEM_JSON, Problem};
 use super::extract::Json;
 use crate::github::GithubError;
 use crate::run_credentials::RunCredentialsError;
+
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(run_credential))
+}
 
 #[derive(Deserialize, ToSchema)]
 pub struct RunCredentialRequest {
@@ -31,8 +37,6 @@ pub struct RunCredential {
         (status = OK, description = "The one-hour GitHub App token for the repository of the open Job that has this placeholder", body = RunCredential),
         (status = BAD_REQUEST, description = "The body is not a placeholder and a host", body = Problem, content_type = PROBLEM_JSON),
         (status = UNAUTHORIZED, description = "No injector token, or another one", body = Problem, content_type = PROBLEM_JSON),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
         (status = NOT_FOUND, description = "No open Job of Tenport has this placeholder, the host is not GitHub, or the GitHub App is not installed on the repository", body = Problem, content_type = PROBLEM_JSON),
     ),
 )]
@@ -44,17 +48,18 @@ pub async fn run_credential(
     let value = state
         .run_credentials
         .repo_token(&state.db, &body.placeholder, &body.host)
-        .await
-        .map_err(run_credential_error)?;
+        .await?;
     Ok(Json(RunCredential { value }))
 }
 
-fn run_credential_error(error: RunCredentialsError) -> HttpError {
-    match error {
-        RunCredentialsError::NoRunCredential { .. }
-        | RunCredentialsError::Github(GithubError::NotInstalled { .. }) => {
-            HttpError::NotFound(error.to_string())
+impl From<RunCredentialsError> for HttpError {
+    fn from(error: RunCredentialsError) -> Self {
+        match error {
+            RunCredentialsError::NoRunCredential { .. }
+            | RunCredentialsError::Github(GithubError::NotInstalled { .. }) => {
+                Self::NotFound(error.to_string())
+            }
+            other => Self::internal(other),
         }
-        other => HttpError::internal(other),
     }
 }

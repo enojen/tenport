@@ -2,18 +2,27 @@ use axum::extract::{OriginalUri, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 
 use super::AppState;
 use super::auth::CurrentUser;
-use super::error::{
-    HttpError, NotMember, PROBLEM_JSON, Problem, TooManyRequests, Unauthorized, Unavailable,
-};
+use super::error::{HttpError, NotMember, NotProjectAdmin, PROBLEM_JSON, Problem};
 use super::extract::{Json, Path, Query};
 use super::page::{Page, PageQuery, Paged};
 use crate::accounts::OrganizationId;
 use crate::name::Name;
-use crate::projects::{self, ProjectId, ProjectSecret, Repo, SecretState, SecretValue};
+use crate::projects::{
+    self, ProjectId, ProjectSecret, ProjectsError, Repo, SecretState, SecretValue,
+};
 use time::OffsetDateTime;
+
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(add_project, list_projects))
+        .routes(routes!(write_secret, delete_secret))
+        .routes(routes!(list_secrets))
+}
 
 #[derive(Deserialize, ToSchema)]
 pub struct NewProject {
@@ -41,9 +50,6 @@ pub struct Project {
     responses(
         (status = CREATED, description = "The project is added", body = Project),
         (status = BAD_REQUEST, description = "The body is not a valid new project", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
         (status = FORBIDDEN, description = "The user is not an admin of the organization", body = Problem, content_type = PROBLEM_JSON),
     ),
 )]
@@ -70,9 +76,6 @@ pub async fn add_project(
         (status = OK, description = "The projects of the user's organizations, by name; a Link header with rel=\"next\" gives the next page", body = Vec<Project>,
             headers(("Link" = String, description = "The next page, when there is one"))),
         (status = BAD_REQUEST, description = "A limit out of 1 to 100, or an after that is not a project id", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
     ),
 )]
 pub async fn list_projects(
@@ -82,8 +85,7 @@ pub async fn list_projects(
     Query(query): Query<PageQuery>,
 ) -> Result<Paged<Project>, HttpError> {
     let page = Page::try_from(query)?;
-    let after = page.after.as_deref().map(ProjectId::parse).transpose();
-    let after = after.map_err(|error| HttpError::BadRequest(format!("after: {error}")))?;
+    let after = page.parse_after(ProjectId::parse)?;
     let found =
         projects::list_of_user(&state.db, &user.id, after.as_ref(), page.rows_to_read()).await?;
     let projects = found.into_iter().map(Project::from).collect();
@@ -138,10 +140,7 @@ impl From<SecretState> for Secret {
     responses(
         (status = OK, description = "The secret is written to the Secret project-<project id>; Tenport keeps no copy and gives back only its name", body = Secret),
         (status = BAD_REQUEST, description = "A name Tenport does not know, or a value that is empty or too long", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
-        (status = FORBIDDEN, description = "The user is not an admin of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = FORBIDDEN, response = NotProjectAdmin),
     ),
 )]
 pub async fn write_secret(
@@ -167,10 +166,7 @@ pub async fn write_secret(
     responses(
         (status = NO_CONTENT, description = "The secret is deleted from the Secret project-<project id>"),
         (status = BAD_REQUEST, description = "A name Tenport does not know", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
-        (status = FORBIDDEN, description = "The user is not an admin of the project's organization", body = Problem, content_type = PROBLEM_JSON),
+        (status = FORBIDDEN, response = NotProjectAdmin),
         (status = NOT_FOUND, description = "The project has no such secret", body = Problem, content_type = PROBLEM_JSON),
     ),
 )]
@@ -191,9 +187,6 @@ pub async fn delete_secret(
     params(("project" = String, Path, description = "The id of the project")),
     responses(
         (status = OK, description = "The secrets that Tenport wrote for the project, by name: never their values", body = Vec<Secret>),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
         (status = FORBIDDEN, response = NotMember),
     ),
 )]
@@ -204,4 +197,16 @@ pub async fn list_secrets(
 ) -> Result<Json<Vec<Secret>>, HttpError> {
     let found = projects::list_secrets(&state.db, &user.id, &project).await?;
     Ok(Json(found.into_iter().map(Secret::from).collect()))
+}
+
+impl From<ProjectsError> for HttpError {
+    fn from(error: ProjectsError) -> Self {
+        match error {
+            ProjectsError::NotAdmin { .. }
+            | ProjectsError::NotMember { .. }
+            | ProjectsError::NotProjectAdmin { .. } => Self::Forbidden(error.to_string()),
+            ProjectsError::SecretNotSet { .. } => Self::NotFound(error.to_string()),
+            other => Self::internal(other),
+        }
+    }
 }

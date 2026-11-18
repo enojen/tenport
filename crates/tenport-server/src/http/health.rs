@@ -1,11 +1,17 @@
 use axum::extract::State;
 use serde::Serialize;
 use utoipa::ToSchema;
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 
 use super::AppState;
 use super::error::{HttpError, Unavailable};
 use super::extract::Json;
 use crate::db;
+
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(health))
+}
 
 #[derive(Serialize, ToSchema)]
 pub struct Health {

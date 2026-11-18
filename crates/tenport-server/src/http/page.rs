@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use axum::http::header::LINK;
 use axum::http::{HeaderValue, Uri};
 use axum::response::{IntoResponse, Response};
@@ -21,8 +23,8 @@ pub struct PageQuery {
 }
 
 pub struct Page {
-    pub limit: u32,
-    pub after: Option<String>,
+    limit: u32,
+    after: Option<String>,
 }
 
 impl TryFrom<PageQuery> for Page {
@@ -43,6 +45,14 @@ impl TryFrom<PageQuery> for Page {
 }
 
 impl Page {
+    pub fn parse_after<K, E: Display>(
+        &self,
+        parse: impl FnOnce(&str) -> Result<K, E>,
+    ) -> Result<Option<K>, HttpError> {
+        let after = self.after.as_deref().map(parse).transpose();
+        after.map_err(|error| HttpError::BadRequest(format!("{AFTER}: {error}")))
+    }
+
     pub fn rows_to_read(&self) -> i64 {
         i64::from(self.limit) + 1
     }

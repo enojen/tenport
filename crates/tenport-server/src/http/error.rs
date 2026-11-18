@@ -10,8 +10,6 @@ use utoipa::openapi::schema::{ObjectBuilder, Type};
 use utoipa::openapi::{self, Content, Ref, RefOr, ResponseBuilder};
 use utoipa::{ToResponse, ToSchema};
 
-use crate::projects::ProjectsError;
-
 #[cfg(test)]
 mod tests;
 
@@ -125,18 +123,6 @@ impl From<PathRejection> for HttpError {
     }
 }
 
-impl From<ProjectsError> for HttpError {
-    fn from(error: ProjectsError) -> Self {
-        match error {
-            ProjectsError::NotAdmin { .. }
-            | ProjectsError::NotMember { .. }
-            | ProjectsError::NotProjectAdmin { .. } => Self::Forbidden(error.to_string()),
-            ProjectsError::SecretNotSet { .. } => Self::NotFound(error.to_string()),
-            other => Self::internal(other),
-        }
-    }
-}
-
 impl From<JsonRejection> for HttpError {
     fn from(rejection: JsonRejection) -> Self {
         if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE {
@@ -222,6 +208,10 @@ pub struct Unauthorized;
 
 pub struct NotMember;
 
+pub struct NotProjectAdmin;
+
+pub struct RunNotFound;
+
 pub struct TooManyRequests;
 
 pub struct Unavailable;
@@ -237,6 +227,20 @@ impl<'s> ToResponse<'s> for NotMember {
     fn response() -> (&'s str, RefOr<openapi::Response>) {
         let response = problem_response("The user is not a member of the project's organization");
         ("NotMember", response.build().into())
+    }
+}
+
+impl<'s> ToResponse<'s> for NotProjectAdmin {
+    fn response() -> (&'s str, RefOr<openapi::Response>) {
+        let response = problem_response("The user is not an admin of the project's organization");
+        ("NotProjectAdmin", response.build().into())
+    }
+}
+
+impl<'s> ToResponse<'s> for RunNotFound {
+    fn response() -> (&'s str, RefOr<openapi::Response>) {
+        let response = problem_response("Tenport does not know the run");
+        ("RunNotFound", response.build().into())
     }
 }
 

@@ -8,12 +8,12 @@ use futures::{AsyncBufReadExt, Stream, stream};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
+use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 
 use super::AppState;
 use super::auth::CurrentUser;
-use super::error::{
-    HttpError, NotMember, PROBLEM_JSON, Problem, TooManyRequests, Unauthorized, Unavailable,
-};
+use super::error::{HttpError, NotMember, PROBLEM_JSON, Problem, RunNotFound};
 use super::extract::{Json, Path, Query};
 use super::limits::LogStreamPermit;
 use super::page::{Page, PageQuery, Paged};
@@ -23,6 +23,13 @@ use crate::name::Name;
 use crate::projects::ProjectId;
 use crate::runs::{self, Branch, ClassName, Command, RunName, RunPhase, RunsError, ServiceName};
 use crate::tasks::TaskId;
+
+pub fn routes() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new()
+        .routes(routes!(start_run, list_runs))
+        .routes(routes!(find_run, stop_run))
+        .routes(routes!(read_log))
+}
 
 #[derive(Deserialize, ToSchema)]
 pub struct NewRun {
@@ -71,9 +78,6 @@ pub struct Run {
     responses(
         (status = CREATED, description = "The Job of the run is created", body = Run),
         (status = BAD_REQUEST, description = "The body is not a valid run: an unknown command, class or service", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
         (status = FORBIDDEN, response = NotMember),
         (status = CONFLICT, description = "A Job of the task still runs (code machine-busy)", body = Problem, content_type = PROBLEM_JSON),
     ),
@@ -85,10 +89,7 @@ pub async fn start_run(
 ) -> Result<(StatusCode, Json<Run>), HttpError> {
     let new = new_run(body)?;
     let start = async move { state.runs.start(&state.db, &user.id, new).await };
-    let run = tokio::spawn(start)
-        .await
-        .map_err(HttpError::internal)?
-        .map_err(start_error)?;
+    let run = tokio::spawn(start).await.map_err(HttpError::internal)??;
     Ok((StatusCode::CREATED, Json(run.into())))
 }
 
@@ -142,9 +143,6 @@ pub struct LogQuery {
         (status = OK, description = "The runs of the task, the oldest first; a Link header with rel=\"next\" gives the next page", body = Vec<RunState>,
             headers(("Link" = String, description = "The next page, when there is one"))),
         (status = BAD_REQUEST, description = "No project or task, an id that is not valid, or a limit out of 1 to 100", body = Problem, content_type = PROBLEM_JSON),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
         (status = FORBIDDEN, response = NotMember),
     ),
 )]
@@ -156,8 +154,7 @@ pub async fn list_runs(
     Query(page): Query<PageQuery>,
 ) -> Result<Paged<RunState>, HttpError> {
     let page = Page::try_from(page)?;
-    let after = page.after.as_deref().map(RunName::parse).transpose();
-    let after = after.map_err(|error| HttpError::BadRequest(format!("after: {error}")))?;
+    let after = page.parse_after(RunName::parse)?;
     let limit = page.rows_to_read();
     let found = state
         .runs
@@ -169,8 +166,7 @@ pub async fn list_runs(
             after.as_ref(),
             limit,
         )
-        .await
-        .map_err(run_error)?;
+        .await?;
     let runs = found.into_iter().map(RunState::from).collect();
     Ok(Paged::new(runs, &page, &uri, |run| run.name.clone()))
 }
@@ -182,11 +178,8 @@ pub async fn list_runs(
     params(("name" = String, Path, description = "The name of the run, the name of its Job")),
     responses(
         (status = OK, description = "The run, with the phase of its Job", body = RunState),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
         (status = FORBIDDEN, response = NotMember),
-        (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
+        (status = NOT_FOUND, response = RunNotFound),
     ),
 )]
 pub async fn find_run(
@@ -194,11 +187,7 @@ pub async fn find_run(
     CurrentUser(user): CurrentUser,
     Path(name): Path<RunName>,
 ) -> Result<Json<RunState>, HttpError> {
-    let run = state
-        .runs
-        .find(&state.db, &user.id, &name)
-        .await
-        .map_err(run_error)?;
+    let run = state.runs.find(&state.db, &user.id, &name).await?;
     Ok(Json(run.into()))
 }
 
@@ -212,11 +201,8 @@ pub async fn find_run(
     ),
     responses(
         (status = OK, description = "The log of the box container; with follow=true it stays open until the container ends", body = String, content_type = "text/plain"),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
         (status = FORBIDDEN, response = NotMember),
-        (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
+        (status = NOT_FOUND, response = RunNotFound),
         (status = CONFLICT, description = "The box container has not started (code box-not-started; ask again after Retry-After seconds), or the Job is gone (code job-gone)", body = Problem, content_type = PROBLEM_JSON,
             headers(("Retry-After" = u32, description = "Seconds to wait before asking again; only with box-not-started"))),
     ),
@@ -231,8 +217,7 @@ pub async fn read_log(
     let reader = state
         .runs
         .open_log(&state.db, &user.id, &name, query.follow)
-        .await
-        .map_err(run_error)?;
+        .await?;
     let headers = [(header::CONTENT_TYPE, TEXT_PLAIN)];
     Ok((headers, Body::from_stream(log_chunks(reader, permit))).into_response())
 }
@@ -244,11 +229,8 @@ pub async fn read_log(
     params(("name" = String, Path, description = "The name of the run, the name of its Job")),
     responses(
         (status = NO_CONTENT, description = "The run is stopped: its Job and pod are deleted, or were gone"),
-        (status = UNAUTHORIZED, response = Unauthorized),
-        (status = TOO_MANY_REQUESTS, response = TooManyRequests),
-        (status = SERVICE_UNAVAILABLE, response = Unavailable),
         (status = FORBIDDEN, response = NotMember),
-        (status = NOT_FOUND, description = "Tenport does not know the run", body = Problem, content_type = PROBLEM_JSON),
+        (status = NOT_FOUND, response = RunNotFound),
     ),
 )]
 pub async fn stop_run(
@@ -256,11 +238,7 @@ pub async fn stop_run(
     CurrentUser(user): CurrentUser,
     Path(name): Path<RunName>,
 ) -> Result<StatusCode, HttpError> {
-    state
-        .runs
-        .stop(&state.db, &user.id, &name)
-        .await
-        .map_err(run_error)?;
+    state.runs.stop(&state.db, &user.id, &name).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -277,13 +255,19 @@ fn log_chunks(
     })
 }
 
-fn run_error(error: RunsError) -> HttpError {
-    match error {
-        RunsError::Projects(error) => error.into(),
-        RunsError::NotFound { .. } => HttpError::NotFound(error.to_string()),
-        RunsError::NotStarted { .. } => HttpError::BoxNotStarted(error.to_string()),
-        RunsError::JobGone { .. } => HttpError::JobGone(error.to_string()),
-        other => HttpError::internal(other),
+impl From<RunsError> for HttpError {
+    fn from(error: RunsError) -> Self {
+        match error {
+            RunsError::Projects(error) => error.into(),
+            RunsError::NotFound { .. } => Self::NotFound(error.to_string()),
+            RunsError::NotStarted { .. } => Self::BoxNotStarted(error.to_string()),
+            RunsError::JobGone { .. } => Self::JobGone(error.to_string()),
+            RunsError::Busy { .. } => Self::MachineBusy(error.to_string()),
+            RunsError::Template(
+                runs::TemplateError::NoClass { .. } | runs::TemplateError::NoService { .. },
+            ) => Self::BadRequest(error.to_string()),
+            other => Self::internal(other),
+        }
     }
 }
 
@@ -323,17 +307,6 @@ fn new_run(body: NewRun) -> Result<runs::NewRun, HttpError> {
             email: body.author.email,
         },
     })
-}
-
-fn start_error(error: RunsError) -> HttpError {
-    match error {
-        RunsError::Projects(error) => error.into(),
-        RunsError::Busy { .. } => HttpError::MachineBusy(error.to_string()),
-        RunsError::Template(
-            runs::TemplateError::NoClass { .. } | runs::TemplateError::NoService { .. },
-        ) => HttpError::BadRequest(error.to_string()),
-        other => HttpError::internal(other),
-    }
 }
 
 impl From<runs::Run> for Run {
