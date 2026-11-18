@@ -12,7 +12,8 @@ use time::OffsetDateTime;
 
 use super::Cluster;
 use super::model::{
-    ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodName, PodState, SecretName,
+    ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogRead, LogReader, PodName,
+    PodState, SecretName,
 };
 
 type SecretData = BTreeMap<String, String>;
@@ -21,6 +22,7 @@ type SecretData = BTreeMap<String, String>;
 pub struct FakeCluster {
     jobs: Mutex<BTreeMap<JobName, FakeJob>>,
     secrets: Mutex<BTreeMap<SecretName, SecretData>>,
+    secret_owners: Mutex<BTreeMap<SecretName, CreatedJob>>,
     create_time: Duration,
 }
 
@@ -67,6 +69,26 @@ impl FakeCluster {
         self.lock_secrets().get(name).cloned()
     }
 
+    pub fn secret_owner(&self, name: &SecretName) -> Option<CreatedJob> {
+        self.secret_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(name)
+            .cloned()
+    }
+
+    pub fn uid_of(job: &JobName) -> JobUid {
+        JobUid::new(format!("uid-of-{}", job.as_str()))
+    }
+
+    fn create_owned_secret(&self, secret: &SecretName, owner: &CreatedJob, key: &str, value: &str) {
+        self.write_key(secret, key, value);
+        self.secret_owners
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(secret.clone(), owner.clone());
+    }
+
     fn lock_secrets(&self) -> std::sync::MutexGuard<'_, BTreeMap<SecretName, SecretData>> {
         self.secrets
             .lock()
@@ -92,7 +114,7 @@ impl FakeCluster {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn create(&self, job: Job) -> Result<JobName, ClusterError> {
+    fn create(&self, job: Job) -> Result<CreatedJob, ClusterError> {
         let name = JobName::new(job.metadata.name.clone().ok_or(ClusterError::NoName)?);
         let mut jobs = self.lock();
         if jobs.contains_key(&name) {
@@ -105,7 +127,10 @@ impl FakeCluster {
             pod: None,
         };
         jobs.insert(name.clone(), fake);
-        Ok(name)
+        Ok(CreatedJob {
+            uid: Self::uid_of(&name),
+            name,
+        })
     }
 
     fn list(&self, selector: &str) -> Vec<JobState> {
@@ -149,7 +174,7 @@ impl FakeCluster {
 }
 
 impl Cluster for FakeCluster {
-    fn create_job(&self, job: Job) -> BoxFuture<'_, Result<JobName, ClusterError>> {
+    fn create_job(&self, job: Job) -> BoxFuture<'_, Result<CreatedJob, ClusterError>> {
         async move {
             tokio::time::sleep(self.create_time).await;
             self.create(job)
@@ -199,6 +224,17 @@ impl Cluster for FakeCluster {
         key: &'a str,
     ) -> BoxFuture<'a, Result<bool, ClusterError>> {
         ready(Ok(self.delete_key(secret, key))).boxed()
+    }
+
+    fn create_job_secret<'a>(
+        &'a self,
+        secret: &'a SecretName,
+        owner: &'a CreatedJob,
+        key: &'a str,
+        value: &'a str,
+    ) -> BoxFuture<'a, Result<(), ClusterError>> {
+        self.create_owned_secret(secret, owner, key, value);
+        ready(Ok(())).boxed()
     }
 }
 

@@ -4,7 +4,8 @@ use k8s_openapi::api::batch::v1::Job;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tenport_server::accounts::{Role, Token};
-use tenport_server::cluster::{FakeCluster, JobName, JobPhase, PodName, PodState};
+use tenport_server::cluster::{FakeCluster, JobName, JobPhase, PodName, PodState, SecretName};
+use tenport_server::run_credentials::RunCredentialKey;
 
 use crate::server::TestServer;
 
@@ -429,4 +430,28 @@ async fn a_project_name_with_no_label_character_reaches_the_job_as_its_id() {
     let job = &server.cluster.jobs()[0];
     let labels = job.metadata.labels.as_ref().unwrap();
     assert_eq!(labels["project"], project.as_str());
+}
+
+#[tokio::test]
+async fn the_job_of_a_run_gets_its_own_placeholder_in_a_secret_that_goes_with_the_job() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let project = project_of(&server, &token).await;
+
+    let response = post_run(&server, &token, &build(&project)).await;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let run: Value = response.json().await.unwrap();
+    let job = JobName::new(run["name"].as_str().unwrap());
+    let secret = SecretName::new(format!("{}-github", job.as_str()));
+    let uid = FakeCluster::uid_of(&job);
+    let placeholder = RunCredentialKey::new(crate::server::RUN_CREDENTIAL_KEY).placeholder(&uid);
+    assert!(placeholder.starts_with("tbxph_"), "{placeholder}");
+    assert_eq!(
+        server.cluster.secret(&secret),
+        Some([("token".to_owned(), placeholder)].into())
+    );
+    let owner = server.cluster.secret_owner(&secret).unwrap();
+    assert_eq!(owner.name, job);
+    assert_eq!(owner.uid, uid);
 }

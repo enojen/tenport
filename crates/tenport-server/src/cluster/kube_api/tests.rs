@@ -132,3 +132,18 @@ fn a_new_secret_is_opaque_and_holds_only_the_written_key() {
         Some([("ntfy_url".to_owned(), "https://n/x".to_owned())].into())
     );
 }
+
+#[test]
+fn a_job_secret_names_its_job_as_owner_so_it_goes_with_the_job() {
+    let job = CreatedJob {
+        name: JobName::new("task-ten-301-1118-101500"),
+        uid: JobUid::new("0f3c1c9e-5a7b-4e2d-9c1a-7b6d5e4f3a21"),
+    };
+
+    let owner = job_owner(&job);
+
+    assert_eq!(owner.api_version, "batch/v1");
+    assert_eq!(owner.kind, "Job");
+    assert_eq!(owner.name, "task-ten-301-1118-101500");
+    assert_eq!(owner.uid, "0f3c1c9e-5a7b-4e2d-9c1a-7b6d5e4f3a21");
+}

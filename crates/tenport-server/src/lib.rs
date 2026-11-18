@@ -13,6 +13,7 @@ mod id;
 pub mod logs;
 pub mod name;
 pub mod projects;
+pub mod run_credentials;
 pub mod runs;
 pub mod task_archives;
 pub mod tasks;

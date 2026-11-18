@@ -43,6 +43,25 @@ impl SecretName {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct JobUid(String);
+
+impl JobUid {
+    pub fn new(uid: impl Into<String>) -> Self {
+        Self(uid.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreatedJob {
+    pub name: JobName,
+    pub uid: JobUid,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobPhase {
     Running,
@@ -77,6 +96,8 @@ pub type LogReader = Pin<Box<dyn AsyncBufRead + Send>>;
 pub enum ClusterError {
     #[error("the Job has no name")]
     NoName,
+    #[error("the Job {} came back without a uid", .0.as_str())]
+    NoUid(JobName),
     #[error("the Job {} exists", .0.as_str())]
     Exists(JobName),
     #[error("the pod {} is gone", .0.as_str())]

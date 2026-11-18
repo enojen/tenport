@@ -346,6 +346,18 @@ The steps, in order:
      the Mozilla roots built in, as its image has no CA files.
    - Tenport's Jobs send their placeholders to an injector of their own, which asks Tenport;
      the injector of the tenbox server stays as it is until step 11.
+   - The placeholder (4a): right after a Job is created, Tenport writes the Secret
+     `<job>-github` with `token`, the placeholder `tbxph_` and the base64url HMAC-SHA256 of the
+     Job's uid under the key of `TENPORT_RUN_CREDENTIAL_KEY_FILE`, the same as the tenbox
+     server's. The Job owns the Secret, so Kubernetes deletes it with the Job. When the write
+     fails, Tenport deletes the Job. Tenport does not serve without the key.
+   - `POST /run-credentials` (4b): the injector sends `{placeholder, host}` with the injector
+     token of `TENPORT_INJECTOR_TOKEN_FILE` and gets `{ok, value}`, the one-hour token of the
+     GitHub App (`TENPORT_GITHUB_APP_ID`, `TENPORT_GITHUB_APP_KEY_FILE`) for the repository of
+     the open Job whose placeholder it is.
+   - tenyard (4c): `egress/proxy-tenport`, the same injector image asking Tenport; Tenport's run
+     template points `HTTPS_PROXY` at it. The App key is the same; the placeholder key and the
+     injector token are new values, so neither server can use the other's.
 5. The runs: `run.finished`, so `GET /runs?project=<id>&task=<id>` and `GET /runs/{name}` keep
    the phase after the Job is deleted. `run.finished` also keeps the JSON result of the tenbox
    command (the last JSON line of the box log) as `output`, and `GET /runs/{name}` gives it. An

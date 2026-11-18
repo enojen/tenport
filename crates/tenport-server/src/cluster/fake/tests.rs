@@ -42,7 +42,7 @@ async fn a_second_job_of_the_same_name_is_refused() {
 #[tokio::test]
 async fn a_deleted_job_is_gone_and_a_second_delete_finds_nothing() {
     let cluster = FakeCluster::default();
-    let name = cluster.create_job(job("a", "TEN-1")).await.unwrap();
+    let name = cluster.create_job(job("a", "TEN-1")).await.unwrap().name;
     assert!(cluster.delete_job(&name).await.unwrap());
     assert!(!cluster.delete_job(&name).await.unwrap());
     assert!(cluster.jobs().is_empty());
@@ -51,7 +51,7 @@ async fn a_deleted_job_is_gone_and_a_second_delete_finds_nothing() {
 #[tokio::test]
 async fn the_log_of_a_pod_is_read() {
     let cluster = FakeCluster::default();
-    let name = cluster.create_job(job("a", "TEN-1")).await.unwrap();
+    let name = cluster.create_job(job("a", "TEN-1")).await.unwrap().name;
     assert_eq!(cluster.find_pod(&name).await.unwrap(), None);
     let pod = PodState {
         name: PodName::new("a-x"),
