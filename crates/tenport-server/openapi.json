@@ -510,6 +510,18 @@
             "example": "task-ten-301-1117-101500",
             "type": "string"
           },
+          "oom": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "output": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
           "phase": {
             "$ref": "#/components/schemas/RunPhase"
           },

@@ -455,3 +455,89 @@ async fn the_job_of_a_run_gets_its_own_placeholder_in_a_secret_that_goes_with_th
     assert_eq!(owner.name, job);
     assert_eq!(owner.uid, uid);
 }
+
+const BUILD_LOG: &str = "tenbox-boot: ready at 2026-11-18T14:01:52Z
+{
+  \"ok\": true,
+  \"task\": \"TEN-301\"
+}
+tenbox-boot: command ended with exit code 0
+tenbox-boot: memory peak 731 MiB, cpu 26 s, pids peak 81, oom_kill 0
+tenbox-boot: home saved to the task archive: 8.5M
+";
+
+async fn ended_run(server: &TestServer, token: &Token, phase: JobPhase, log: &str) -> String {
+    let (_, name) = started_run(server, token).await;
+    let job = JobName::new(&name);
+    server.cluster.set_phase(&job, phase);
+    let pod = PodState {
+        name: PodName::new(format!("{name}-abcde")),
+        started: true,
+        reason: Some("Completed".to_owned()),
+    };
+    server.cluster.set_pod(&job, pod, log);
+    name
+}
+
+#[tokio::test]
+async fn an_ended_run_gives_the_output_of_its_command() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let name = ended_run(&server, &token, JobPhase::Succeeded, BUILD_LOG).await;
+    let run: Value = get(&server, &token, &format!("/runs/{name}"))
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(run["phase"], "Succeeded");
+    assert_eq!(run["reason"], "Completed");
+    assert_eq!(run["oom"], false);
+    assert_eq!(run["output"], json!({ "ok": true, "task": "TEN-301" }));
+}
+
+#[tokio::test]
+async fn an_ended_run_keeps_its_phase_reason_and_output_after_its_job_is_gone() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let name = ended_run(&server, &token, JobPhase::Failed, BUILD_LOG).await;
+    get(&server, &token, &format!("/runs/{name}")).await;
+    delete(&server, &token, &format!("/runs/{name}")).await;
+    assert!(server.cluster.jobs().is_empty());
+    let run: Value = get(&server, &token, &format!("/runs/{name}"))
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(run["phase"], "Failed");
+    assert_eq!(run["reason"], "Completed");
+    assert_eq!(run["output"], json!({ "ok": true, "task": "TEN-301" }));
+}
+
+#[tokio::test]
+async fn a_box_whose_process_was_killed_for_memory_is_oom() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let log = BUILD_LOG.replace("oom_kill 0", "oom_kill 2");
+    let name = ended_run(&server, &token, JobPhase::Failed, &log).await;
+    let run: Value = get(&server, &token, &format!("/runs/{name}"))
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(run["oom"], true);
+}
+
+#[tokio::test]
+async fn a_running_run_has_no_output_yet() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let (_, name) = started_run(&server, &token).await;
+    let run: Value = get(&server, &token, &format!("/runs/{name}"))
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(run["phase"], "Running");
+    assert_eq!(run["output"], Value::Null);
+    assert_eq!(run["oom"], Value::Null);
+}

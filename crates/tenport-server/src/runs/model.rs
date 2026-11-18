@@ -102,18 +102,22 @@ parsed_text!(Branch, BranchError);
 pub enum RunsEvent {
     #[serde(rename = "run.started")]
     RunStarted(RunStarted),
+    #[serde(rename = "run.finished")]
+    RunFinished(RunFinished),
 }
 
 impl RunsEvent {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::RunStarted(_) => "run.started",
+            Self::RunFinished(_) => "run.finished",
         }
     }
 
     pub fn subject(&self) -> String {
         match self {
             Self::RunStarted(started) => format!("run:{}", started.run),
+            Self::RunFinished(finished) => format!("run:{}", finished.run),
         }
     }
 }
@@ -127,6 +131,40 @@ pub struct RunStarted {
     pub class: ClassName,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunFinished {
+    pub project: ProjectId,
+    pub task: TaskId,
+    pub run: RunName,
+    #[serde(flatten)]
+    pub end: RunEnd,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunEnd {
+    pub phase: EndPhase,
+    pub reason: Option<String>,
+    pub oom: bool,
+    pub output: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+pub enum EndPhase {
+    Succeeded,
+    Failed,
+    Unknown,
+}
+
+impl From<EndPhase> for RunPhase {
+    fn from(phase: EndPhase) -> Self {
+        match phase {
+            EndPhase::Succeeded => Self::Succeeded,
+            EndPhase::Failed => Self::Failed,
+            EndPhase::Unknown => Self::Unknown,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Run {
     pub name: RunName,
@@ -135,6 +173,7 @@ pub struct Run {
     pub command: CommandName,
     pub class: ClassName,
     pub created: OffsetDateTime,
+    pub end: Option<RunEnd>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
@@ -160,4 +199,6 @@ pub struct RunState {
     pub run: Run,
     pub phase: RunPhase,
     pub reason: Option<String>,
+    pub oom: Option<bool>,
+    pub output: Option<serde_json::Value>,
 }

@@ -1,3 +1,4 @@
+mod box_log;
 mod command;
 mod model;
 mod store;
@@ -8,6 +9,7 @@ mod tests;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+use std::time::Duration;
 
 use sqlx::SqliteConnection;
 use time::OffsetDateTime;
@@ -17,12 +19,12 @@ use crate::accounts::{Email, UserId};
 use crate::github::{GITHUB_HOSTS, GithubApp, GithubError, RepoToken};
 use crate::run_credentials::{RUN_TOKEN_KEY, RunCredentialKey, run_token_secret};
 use crate::task_archives::{TaskArchiveBucket, TaskArchiveState, TaskArchivesError};
+use futures::AsyncReadExt;
 use futures::future::try_join_all;
-use futures::try_join;
 
 use crate::cluster::{
     Cluster, ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogRead, LogReader,
-    PodState,
+    PodName, PodState,
 };
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
@@ -32,8 +34,8 @@ use crate::tasks::{TaskDeleted, TaskId, TasksEvent};
 
 pub use command::{Command, CommandError, CommandName, command_rules};
 pub use model::{
-    Branch, BranchError, ClassName, ClassNameError, Run, RunName, RunNameError, RunPhase,
-    RunStarted, RunState, RunsEvent, ServiceName, ServiceNameError,
+    Branch, BranchError, ClassName, ClassNameError, EndPhase, Run, RunEnd, RunFinished, RunName,
+    RunNameError, RunPhase, RunStarted, RunState, RunsEvent, ServiceName, ServiceNameError,
 };
 pub use template::{RunTemplate, TemplateError};
 
@@ -54,6 +56,8 @@ pub enum RunsError {
         run: RunName,
         reason: Option<String>,
     },
+    #[error("cannot read the log of the box: {0}")]
+    Log(String),
     #[error("the run {run} has no log: its Job is gone")]
     JobGone { run: RunName },
     #[error("task {task} still runs on the cluster: {}; wait until it ends", jobs.join(", "))]
@@ -194,15 +198,46 @@ impl Runs {
         limit: i64,
     ) -> Result<Vec<RunState>, RunsError> {
         projects::require_member(db, user, project).await?;
-        let (runs, jobs) = try_join!(
-            list_runs_of_task(db, project, task, after, limit),
-            self.list_jobs_of_task(project, task)
-        )?;
+        let runs = list_runs_of_task(db, project, task, after, limit).await?;
+        let jobs = self.list_jobs_of_task(project, task).await?;
         let states = runs.into_iter().map(|run| {
             let job = find_job_in(&jobs, &run);
-            self.run_state(run, job)
+            self.run_state(db, run, job)
         });
         try_join_all(states).await
+    }
+
+    pub async fn record_ended_runs_every(self: Arc<Self>, db: Db, period: Duration) {
+        let mut ticks = tokio::time::interval(period);
+        loop {
+            ticks.tick().await;
+            if let Err(error) = self.record_ended_runs(&db).await {
+                tracing::warn!(%error, "cannot record the ended runs");
+            }
+        }
+    }
+
+    pub async fn record_ended_runs(&self, db: &Db) -> Result<usize, RunsError> {
+        let runs = list_runs_without_end(db).await?;
+        if runs.is_empty() {
+            return Ok(0);
+        }
+        let jobs = self.cluster.list_jobs(TENPORT_JOBS).await?;
+        let mut recorded = 0;
+        for run in runs {
+            let job = find_job_in(&jobs, &run);
+            if job.is_some_and(|job| job.phase == JobPhase::Running) {
+                continue;
+            }
+            let name = run.name.clone();
+            match self.run_state(db, run, job).await {
+                Ok(_) => recorded += 1,
+                Err(error) => {
+                    tracing::warn!(run = %name, %error, "cannot record the end of the run")
+                }
+            }
+        }
+        Ok(recorded)
     }
 
     pub async fn find(
@@ -213,7 +248,7 @@ impl Runs {
     ) -> Result<RunState, RunsError> {
         let run = find_run_for_member(db, user, name).await?;
         let job = self.find_job(&run).await?;
-        self.run_state(run, job.as_ref()).await
+        self.run_state(db, run, job.as_ref()).await
     }
 
     pub async fn open_log(
@@ -329,20 +364,87 @@ impl Runs {
         }
     }
 
-    async fn run_state(&self, run: Run, job: Option<&JobState>) -> Result<RunState, RunsError> {
+    async fn run_state(
+        &self,
+        db: &Db,
+        run: Run,
+        job: Option<&JobState>,
+    ) -> Result<RunState, RunsError> {
+        if let Some(end) = run.end.clone() {
+            return Ok(ended_state(run, end));
+        }
         let Some(job) = job else {
-            return Ok(RunState {
-                run,
-                phase: RunPhase::Unknown,
-                reason: None,
-            });
+            return self.finish(db, run, box_log::unknown_end()).await;
         };
+        match job.phase {
+            JobPhase::Running => self.running_state(run, job).await,
+            JobPhase::Succeeded => self.finish_ended(db, run, job, EndPhase::Succeeded).await,
+            JobPhase::Failed => self.finish_ended(db, run, job, EndPhase::Failed).await,
+        }
+    }
+
+    async fn running_state(&self, run: Run, job: &JobState) -> Result<RunState, RunsError> {
         let pod = self.cluster.find_pod(&job.name).await?;
         Ok(RunState {
             run,
-            phase: job.phase.into(),
+            phase: RunPhase::Running,
             reason: pod.and_then(|pod| pod.reason),
+            oom: None,
+            output: None,
         })
+    }
+
+    async fn finish_ended(
+        &self,
+        db: &Db,
+        run: Run,
+        job: &JobState,
+        phase: EndPhase,
+    ) -> Result<RunState, RunsError> {
+        let pod = self.cluster.find_pod(&job.name).await?;
+        let log = match &pod {
+            Some(pod) => self.read_whole_log(&pod.name).await?,
+            None => String::new(),
+        };
+        let reason = pod.and_then(|pod| pod.reason);
+        self.finish(db, run, box_log::run_end(phase, reason, &log))
+            .await
+    }
+
+    async fn read_whole_log(&self, pod: &PodName) -> Result<String, RunsError> {
+        let mut reader = match self.cluster.read_log(pod, LogRead::default()).await {
+            Err(ClusterError::NoPod(_)) => return Ok(String::new()),
+            other => other?,
+        };
+        let mut bytes = Vec::new();
+        reader
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|error| RunsError::Log(error.to_string()))?;
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    async fn finish(&self, db: &Db, run: Run, end: RunEnd) -> Result<RunState, RunsError> {
+        let finished = RunFinished {
+            project: run.project.clone(),
+            task: run.task.clone(),
+            run: run.name.clone(),
+            end: end.clone(),
+        };
+        let event = Event::Runs(RunsEvent::RunFinished(finished));
+        match events::append(db, Actor::Server, event).await {
+            Ok(_) => Ok(ended_state(run, end)),
+            Err(EventsError::Refused { .. }) => self.recorded_state(db, run).await,
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    async fn recorded_state(&self, db: &Db, run: Run) -> Result<RunState, RunsError> {
+        let recorded = find_run(db, &run.name).await?;
+        match recorded.end.clone() {
+            Some(end) => Ok(ended_state(recorded, end)),
+            None => Err(RunsError::NotFound { run: run.name }),
+        }
     }
 
     async fn find_job(&self, run: &Run) -> Result<Option<JobState>, RunsError> {
@@ -414,6 +516,21 @@ async fn find_run(db: &Db, name: &RunName) -> Result<Run, RunsError> {
         .ok_or_else(|| RunsError::NotFound { run: name.clone() })
 }
 
+async fn list_runs_without_end(db: &Db) -> Result<Vec<Run>, RunsError> {
+    let mut conn = db.acquire().await?;
+    Ok(store::list_runs_without_end(&mut conn).await?)
+}
+
+fn ended_state(run: Run, end: RunEnd) -> RunState {
+    RunState {
+        phase: end.phase.into(),
+        reason: end.reason,
+        oom: Some(end.oom),
+        output: end.output,
+        run,
+    }
+}
+
 async fn list_runs_of_task(
     db: &Db,
     project: &ProjectId,
@@ -480,6 +597,13 @@ pub(crate) async fn apply(
 ) -> Result<(), ApplyError> {
     match event {
         RunsEvent::RunStarted(started) => store::insert_run(conn, started, stamp).await?,
+        RunsEvent::RunFinished(finished) => {
+            if !store::update_run_end(conn, finished, stamp).await? {
+                return Err(ApplyError::Refused(
+                    "the run has an end already, or Tenport does not know it",
+                ));
+            }
+        }
     }
     Ok(())
 }

@@ -1,0 +1,134 @@
+{
+  "db_name": "SQLite",
+  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", created_at as \"created: _\",\n                  phase as \"phase: _\", reason, oom as \"oom: _\", output\n           from runs\n           where project_id = ? and task_id = ?\n             and (? is null\n                  or (created_at, name) > (select created_at, name from runs where name = ?))\n           order by created_at, name\n           limit ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "name: _",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "project: _",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "name": "task: _",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "task_id"
+          }
+        }
+      },
+      {
+        "name": "command: _",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "command"
+          }
+        }
+      },
+      {
+        "name": "class: _",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "name": "created: _",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "phase: _",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "phase"
+          }
+        }
+      },
+      {
+        "name": "reason",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "name": "oom: _",
+        "ordinal": 8,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "oom"
+          }
+        }
+      },
+      {
+        "name": "output",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "output"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "e058c4bb12b68733dc94780f10e5831640845190a31c2b32d915b2be781a0b3d"
+}

@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
 use tenport_server::cluster::{Cluster, KubeCluster};
@@ -16,6 +17,7 @@ use tokio::net::TcpListener;
 use tokio::signal::unix::{Signal, SignalKind, signal};
 
 const USAGE_EXIT: u8 = 2;
+const ENDED_RUNS_PERIOD: Duration = Duration::from_secs(30);
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -101,10 +103,15 @@ async fn serve() -> anyhow::Result<()> {
         .with_context(|| format!("cannot listen on {}", config.listen))?;
     let terminate = signal(SignalKind::terminate()).context("cannot watch SIGTERM")?;
     tracing::info!(address = %config.listen, "listening");
+    let runs = Arc::new(runs);
+    tokio::spawn(
+        runs.clone()
+            .record_ended_runs_every(db.clone(), ENDED_RUNS_PERIOD),
+    );
     let state = AppState {
         db,
         cluster,
-        runs: Arc::new(runs),
+        runs,
         injector_token: Arc::new(injector_token),
         limiter: Arc::new(Limiter::new(Limits::default())),
     };

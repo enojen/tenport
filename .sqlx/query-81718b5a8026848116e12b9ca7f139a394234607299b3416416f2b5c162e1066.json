@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", created_at as \"created: _\"\n           from runs\n           where project_id = ? and task_id = ?\n             and (? is null\n                  or (created_at, name) > (select created_at, name from runs where name = ?))\n           order by created_at, name\n           limit ?",
+  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", created_at as \"created: _\",\n                  phase as \"phase: _\", reason, oom as \"oom: _\", output\n           from runs where finished_at is null\n           order by created_at, name",
   "describe": {
     "columns": [
       {
@@ -68,10 +68,54 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "name": "phase: _",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "phase"
+          }
+        }
+      },
+      {
+        "name": "reason",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "name": "oom: _",
+        "ordinal": 8,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "oom"
+          }
+        }
+      },
+      {
+        "name": "output",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "output"
+          }
+        }
       }
     ],
     "parameters": {
-      "Right": 5
+      "Right": 0
     },
     "nullable": [
       false,
@@ -79,8 +123,12 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "8b3fe0415501f54ce467326432f155edbaacce5fad8a8728b22550da6342614d"
+  "hash": "81718b5a8026848116e12b9ca7f139a394234607299b3416416f2b5c162e1066"
 }
