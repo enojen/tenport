@@ -402,18 +402,30 @@ The steps, in order:
    `Succeeded` also sees `output`. A run has one `run.finished`; a second is refused. A run
    whose Job went before Tenport saw it end, as when Tenport is down for more than the 10
    minutes a Job is kept, ends `Unknown`, so the timer stops looking for it.
-6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/rm/ls` go to
+6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/ls` go to
    Tenport. The kubeconfig and the bucket key file leave the computer.
-   - To decide here: a client that only follows `Retry-After` asks forever when the box
-     cannot start, such as with `CreateContainerConfigError`, because that reason does not
-     go away alone. The 409 `box-not-started` carries the reason, so the CLI can stop on a
-     reason that is an error and show it.
-   - One project, one id: Tenport's (decided, 2026-11-18). Today a project can have two:
-     `tenbox.yaml` holds the CLI's (`tenbox-demo`: `rw68a5`), and Tenport made its own at
-     `POST /projects` (`7ihtah`). The task archive key and the box's directories come from the
-     id, so the two would use two archives for one task. `tenbox.yaml` takes the id that
-     `POST /projects` gives, as `tenbox init` does (section 2); the old archives expire after
-     30 days.
+   Done (2026-11-19, tenbox #318): `machine run` puts the project secrets
+   (`PUT /projects/{id}/secrets/{name}`), then `POST /runs`; `--wait` reads
+   `GET /runs/{name}` until `phase` is not `Running`, and never a log; `logs` reads
+   `GET /runs/{name}/log`; `stop` deletes each `Running` run of the task. The CLI has no
+   Kubernetes or bucket code. Each request to Tenport is tried again, once a second for up to
+   10 seconds, when Tenport does not answer or answers 502 or 503: the gap of a deploy.
+   - `machine ls <id>...` takes one or more task ids: a babysitter passes the tasks of its
+     lane. Lanes become rows in Tenport's database (decided, 2026-11-18); then `machine ls`
+     without an id lists the session's lane, and no session reads a lane from a markdown file.
+   - `machine rm` is gone (decided, 2026-11-18). A person deletes, never an agent: the panel
+     will call `DELETE /tasks/{task}`, and the bucket deletes an archive 30 days after its
+     last upload.
+   - A 409 `box-not-started` whose reason does not go away alone, such as
+     `CreateContainerConfigError` or `ErrImagePull`, stops `logs` and shows the reason.
+   - One project, one id: Tenport's. `tenbox.yaml` takes the id that `POST /projects` gives
+     (`tenbox-demo`: `7ihtah`, tenbox-demo #22), as `tenbox init` does (section 2).
+   - Still on the computer: the kubeconfig, for one job only. `machines/login` copies the
+     user's Claude login to the cluster with `kubectl`. It leaves when Tenport gives the box
+     its Claude login, with the agents (section 3).
+   - Later: the tracker key goes through the injector, as the GitHub token does, from a login
+     on the panel; then the CLI stops putting it. ntfy leaves the tasks when the panel shows
+     the notices; it stays for the platform's alerts, to the owner only.
 7. A session in a box reaches Tenport from inside the cluster with a run token that starts runs
    in its own project only, with a limit on nested runs and on open runs at one time.
 8. The cluster watch: nodes, with their Hetzner type and price.
