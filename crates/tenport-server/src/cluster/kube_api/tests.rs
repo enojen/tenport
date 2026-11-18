@@ -49,7 +49,7 @@ fn pod_with(name: &str, second: i64, phase: &str, statuses: Vec<ContainerStatus>
 
 #[test]
 fn a_job_with_no_counts_is_running() {
-    let state = job_state(&job_with(JobStatus::default())).unwrap();
+    let state = job_state(job_with(JobStatus::default())).unwrap();
     assert_eq!(state.phase, JobPhase::Running);
     assert_eq!(state.name.as_str(), "task-ten-1-1117-101500");
     assert_eq!(state.labels.get("task").map(String::as_str), Some("TEN-1"));
@@ -65,15 +65,15 @@ fn a_succeeded_or_failed_count_ends_the_job() {
         failed: Some(1),
         ..JobStatus::default()
     });
-    assert_eq!(job_state(&succeeded).unwrap().phase, JobPhase::Succeeded);
-    assert_eq!(job_state(&failed).unwrap().phase, JobPhase::Failed);
+    assert_eq!(job_state(succeeded).unwrap().phase, JobPhase::Succeeded);
+    assert_eq!(job_state(failed).unwrap().phase, JobPhase::Failed);
 }
 
 #[test]
 fn a_job_without_a_name_is_left_out() {
     let mut job = job_with(JobStatus::default());
     job.metadata.name = None;
-    assert_eq!(job_state(&job), None);
+    assert_eq!(job_state(job), None);
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn a_job_without_a_uid_is_left_out() {
     let mut job = job_with(JobStatus::default());
     job.metadata.uid = None;
 
-    assert_eq!(job_state(&job), None);
+    assert_eq!(job_state(job), None);
 }
 
 fn condition(kind: &str, reason: &str) -> JobCondition {
@@ -175,7 +175,7 @@ fn a_job_past_its_deadline_is_failed_with_its_reason_even_without_a_failed_count
         conditions: Some(vec![condition("Failed", "DeadlineExceeded")]),
         ..JobStatus::default()
     });
-    let state = job_state(&job).unwrap();
+    let state = job_state(job).unwrap();
     assert_eq!(state.phase, JobPhase::Failed);
     assert_eq!(state.failed_reason.as_deref(), Some("DeadlineExceeded"));
 }
@@ -186,7 +186,7 @@ fn a_complete_condition_ends_the_job_as_succeeded() {
         conditions: Some(vec![condition("Complete", "CompletionsReached")]),
         ..JobStatus::default()
     });
-    let state = job_state(&job).unwrap();
+    let state = job_state(job).unwrap();
     assert_eq!(state.phase, JobPhase::Succeeded);
     assert_eq!(state.failed_reason, None);
 }

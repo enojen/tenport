@@ -101,7 +101,7 @@ impl Cluster for KubeCluster {
         async move {
             let params = ListParams::default().labels(&label_selector(labels));
             let list = self.jobs.list(&params).await.map_err(ClusterError::Kube)?;
-            Ok(list.items.iter().filter_map(job_state).collect())
+            Ok(list.items.into_iter().filter_map(job_state).collect())
         }
         .boxed()
     }
@@ -270,15 +270,16 @@ fn status_code(error: &kube::Error) -> Option<u16> {
     }
 }
 
-fn job_state(job: &Job) -> Option<JobState> {
-    let name = JobName::new(job.metadata.name.clone()?);
-    let uid = JobUid::new(job.metadata.uid.clone()?);
+fn job_state(job: Job) -> Option<JobState> {
+    let phase = job_phase(&job);
+    let failed_reason = job_failed_reason(&job);
+    let metadata = job.metadata;
     Some(JobState {
-        name,
-        uid,
-        labels: job.metadata.labels.clone().unwrap_or_default(),
-        phase: job_phase(job),
-        failed_reason: job_failed_reason(job),
+        name: JobName::new(metadata.name?),
+        uid: JobUid::new(metadata.uid?),
+        labels: metadata.labels.unwrap_or_default(),
+        phase,
+        failed_reason,
     })
 }
 
