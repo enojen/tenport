@@ -57,6 +57,8 @@ async fn the_log_of_a_pod_is_read() {
         name: PodName::new("a-x"),
         started: true,
         reason: None,
+        exit_code: None,
+        pod_reason: None,
     };
     cluster.set_pod(&name, pod.clone(), "one\ntwo\n");
     cluster.set_phase(&name, JobPhase::Succeeded);

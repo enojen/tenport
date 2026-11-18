@@ -30,6 +30,7 @@ struct FakeJob {
     job: Job,
     created: OffsetDateTime,
     phase: JobPhase,
+    failed_reason: Option<String>,
     pod: Option<FakePod>,
 }
 
@@ -53,6 +54,13 @@ impl FakeCluster {
     pub fn set_phase(&self, job: &JobName, phase: JobPhase) {
         if let Some(fake) = self.lock().get_mut(job) {
             fake.phase = phase;
+        }
+    }
+
+    pub fn fail(&self, job: &JobName, reason: &str) {
+        if let Some(fake) = self.lock().get_mut(job) {
+            fake.phase = JobPhase::Failed;
+            fake.failed_reason = Some(reason.to_owned());
         }
     }
 
@@ -124,6 +132,7 @@ impl FakeCluster {
             job,
             created: OffsetDateTime::now_utc(),
             phase: JobPhase::Running,
+            failed_reason: None,
             pod: None,
         };
         jobs.insert(name.clone(), fake);
@@ -257,6 +266,7 @@ fn job_state(name: &JobName, fake: &FakeJob) -> JobState {
         labels: fake.job.metadata.labels.clone().unwrap_or_default(),
         created: fake.created,
         phase: fake.phase,
+        failed_reason: fake.failed_reason.clone(),
     }
 }
 

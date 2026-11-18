@@ -16,7 +16,8 @@ struct RunRow {
     created: OffsetDateTime,
     phase: Option<EndPhase>,
     reason: Option<String>,
-    oom: Option<bool>,
+    exit_code: Option<i32>,
+    oom_kill: Option<i64>,
     output: Option<String>,
 }
 
@@ -26,7 +27,8 @@ impl RunRow {
             Some(phase) => Some(RunEnd {
                 phase,
                 reason: self.reason,
-                oom: self.oom.unwrap_or(false),
+                exit_code: self.exit_code,
+                oom_kill: self.oom_kill.and_then(|count| u64::try_from(count).ok()),
                 output: parse_output(self.output.as_deref())?,
             }),
             None => None,
@@ -82,13 +84,16 @@ pub async fn update_run_end(
 ) -> Result<bool, sqlx::Error> {
     let end = &finished.end;
     let output = end.output.as_ref().map(serde_json::Value::to_string);
+    let oom_kill = end.oom_kill.and_then(|count| i64::try_from(count).ok());
     let updated = sqlx::query!(
-        "update runs set finished_at = ?, phase = ?, reason = ?, oom = ?, output = ?
+        "update runs set finished_at = ?, phase = ?, reason = ?, exit_code = ?, oom_kill = ?,
+                         output = ?
          where name = ? and finished_at is null",
         stamp.at,
         end.phase,
         end.reason,
-        end.oom,
+        end.exit_code,
+        oom_kill,
         output,
         finished.run,
     )
@@ -105,7 +110,7 @@ pub async fn find_run(
         RunRow,
         r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
                   command as "command: _", class as "class: _", created_at as "created: _",
-                  phase as "phase: _", reason, oom as "oom: _", output
+                  phase as "phase: _", reason, exit_code as "exit_code: _", oom_kill, output
            from runs where name = ?"#,
         name,
     )
@@ -125,7 +130,7 @@ pub async fn list_runs_of_task(
         RunRow,
         r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
                   command as "command: _", class as "class: _", created_at as "created: _",
-                  phase as "phase: _", reason, oom as "oom: _", output
+                  phase as "phase: _", reason, exit_code as "exit_code: _", oom_kill, output
            from runs
            where project_id = ? and task_id = ?
              and (? is null
@@ -148,7 +153,7 @@ pub async fn list_runs_without_end(conn: &mut SqliteConnection) -> Result<Vec<Ru
         RunRow,
         r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
                   command as "command: _", class as "class: _", created_at as "created: _",
-                  phase as "phase: _", reason, oom as "oom: _", output
+                  phase as "phase: _", reason, exit_code as "exit_code: _", oom_kill, output
            from runs where finished_at is null
            order by created_at, name"#,
     )

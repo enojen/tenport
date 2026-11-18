@@ -214,7 +214,7 @@ async fn a_run_whose_job_is_gone_before_its_end_was_seen_ends_unknown() {
     assert_eq!(runs.record_ended_runs(&db).await.unwrap(), 1);
 
     let recorded = find_run(&db, &run.name).await.unwrap();
-    assert_eq!(recorded.end.unwrap(), box_log::unknown_end());
+    assert_eq!(recorded.end.unwrap(), RunEnd::unknown());
 }
 
 #[tokio::test]
@@ -227,16 +227,12 @@ async fn a_second_end_of_a_run_is_refused_and_the_first_stays() {
     let run = runs.start(&db, &owner.user, build(&project)).await.unwrap();
     cluster.set_phase(&JobName::new(run.name.as_str()), JobPhase::Failed);
     let first = runs
-        .finish(
-            &db,
-            run.clone(),
-            box_log::run_end(EndPhase::Failed, None, ""),
-        )
+        .finish(&db, run.clone(), RunEnd::stopped())
         .await
         .unwrap();
 
     let second = runs
-        .finish(&db, run.clone(), box_log::unknown_end())
+        .finish(&db, run.clone(), RunEnd::unknown())
         .await
         .unwrap();
 

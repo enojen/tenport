@@ -506,13 +506,24 @@
             "format": "date-time",
             "type": "string"
           },
+          "exit_code": {
+            "example": 0,
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "name": {
             "example": "task-ten-301-1117-101500",
             "type": "string"
           },
-          "oom": {
+          "oom_kill": {
+            "example": 0,
+            "format": "int64",
+            "minimum": 0,
             "type": [
-              "boolean",
+              "integer",
               "null"
             ]
           },

@@ -46,6 +46,7 @@ const TENPORT_JOBS: &str = "app.kubernetes.io/managed-by=tenport";
 const PROJECT_ID_LABEL: &str = "project-id";
 const TOKEN_REUSE_MARGIN: time::Duration = time::Duration::minutes(5);
 const LABEL_VALUE_MAX: usize = 63;
+const BACKOFF_LIMIT_EXCEEDED: &str = "BackoffLimitExceeded";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunsError {
@@ -343,9 +344,19 @@ impl Runs {
 
     pub async fn stop(&self, db: &Db, user: &UserId, name: &RunName) -> Result<(), RunsError> {
         let run = find_run_for_member(db, user, name).await?;
+        let job = self.find_job(&run).await?;
+        let running = job
+            .as_ref()
+            .is_some_and(|job| job.phase == JobPhase::Running);
+        if !running {
+            self.run_state(db, run.clone(), job.as_ref()).await?;
+        }
         self.cluster
             .delete_job(&JobName::new(run.name.as_str()))
             .await?;
+        if running && run.end.is_none() {
+            self.finish(db, run, RunEnd::stopped()).await?;
+        }
         Ok(())
     }
 
@@ -374,7 +385,7 @@ impl Runs {
             return Ok(ended_state(run, end));
         }
         let Some(job) = job else {
-            return self.finish(db, run, box_log::unknown_end()).await;
+            return self.finish(db, run, RunEnd::unknown()).await;
         };
         match job.phase {
             JobPhase::Running => self.running_state(run, job).await,
@@ -389,7 +400,8 @@ impl Runs {
             run,
             phase: RunPhase::Running,
             reason: pod.and_then(|pod| pod.reason),
-            oom: None,
+            exit_code: None,
+            oom_kill: None,
             output: None,
         })
     }
@@ -406,9 +418,14 @@ impl Runs {
             Some(pod) => self.read_whole_log(&pod.name).await?,
             None => String::new(),
         };
-        let reason = pod.and_then(|pod| pod.reason);
-        self.finish(db, run, box_log::run_end(phase, reason, &log))
-            .await
+        let end = RunEnd {
+            phase,
+            reason: end_reason(job, pod.as_ref()),
+            exit_code: pod.as_ref().and_then(|pod| pod.exit_code),
+            oom_kill: box_log::oom_kill(&log),
+            output: box_log::command_output(&log),
+        };
+        self.finish(db, run, end).await
     }
 
     async fn read_whole_log(&self, pod: &PodName) -> Result<String, RunsError> {
@@ -525,10 +542,21 @@ fn ended_state(run: Run, end: RunEnd) -> RunState {
     RunState {
         phase: end.phase.into(),
         reason: end.reason,
-        oom: Some(end.oom),
+        exit_code: end.exit_code,
+        oom_kill: end.oom_kill,
         output: end.output,
         run,
     }
+}
+
+fn end_reason(job: &JobState, pod: Option<&PodState>) -> Option<String> {
+    let job_reason = job
+        .failed_reason
+        .clone()
+        .filter(|reason| reason != BACKOFF_LIMIT_EXCEEDED);
+    job_reason
+        .or_else(|| pod.and_then(|pod| pod.pod_reason.clone()))
+        .or_else(|| pod.and_then(|pod| pod.reason.clone()))
 }
 
 async fn list_runs_of_task(

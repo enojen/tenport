@@ -20,6 +20,9 @@ const BOX_CONTAINER: &str = "box";
 const CONFLICT: u16 = 409;
 const NOT_FOUND: u16 = 404;
 const PENDING: &str = "Pending";
+const COMPLETE: &str = "Complete";
+const FAILED: &str = "Failed";
+const TRUE: &str = "True";
 const FIELD_MANAGER: &str = "tenport";
 const OPAQUE: &str = "Opaque";
 
@@ -286,17 +289,38 @@ fn job_state(job: &Job) -> Option<JobState> {
         labels: job.metadata.labels.clone().unwrap_or_default(),
         created,
         phase: job_phase(job),
+        failed_reason: job_failed_reason(job),
     })
+}
+
+fn job_failed_reason(job: &Job) -> Option<String> {
+    job.status
+        .as_ref()?
+        .conditions
+        .as_deref()?
+        .iter()
+        .find(|condition| condition.type_ == FAILED && condition.status == TRUE)?
+        .reason
+        .clone()
+}
+
+fn has_condition(job: &Job, kind: &str) -> bool {
+    job.status
+        .as_ref()
+        .and_then(|status| status.conditions.as_deref())
+        .unwrap_or_default()
+        .iter()
+        .any(|condition| condition.type_ == kind && condition.status == TRUE)
 }
 
 fn job_phase(job: &Job) -> JobPhase {
     let Some(status) = job.status.as_ref() else {
         return JobPhase::Running;
     };
-    if status.succeeded.unwrap_or(0) > 0 {
+    if status.succeeded.unwrap_or(0) > 0 || has_condition(job, COMPLETE) {
         return JobPhase::Succeeded;
     }
-    if status.failed.unwrap_or(0) > 0 {
+    if status.failed.unwrap_or(0) > 0 || has_condition(job, FAILED) {
         return JobPhase::Failed;
     }
     JobPhase::Running
@@ -326,7 +350,17 @@ fn pod_state(pod: &Pod) -> Option<PodState> {
         name,
         started,
         reason: box_status.and_then(box_reason),
+        exit_code: box_status.and_then(box_exit_code),
+        pod_reason: status.and_then(|status| status.reason.clone()),
     })
+}
+
+fn box_exit_code(status: &ContainerStatus) -> Option<i32> {
+    let state = status.state.as_ref()?;
+    state
+        .terminated
+        .as_ref()
+        .map(|terminated| terminated.exit_code)
 }
 
 fn box_reason(status: &ContainerStatus) -> Option<String> {

@@ -76,6 +76,7 @@ pub struct JobState {
     pub labels: BTreeMap<String, String>,
     pub created: OffsetDateTime,
     pub phase: JobPhase,
+    pub failed_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,6 +84,8 @@ pub struct PodState {
     pub name: PodName,
     pub started: bool,
     pub reason: Option<String>,
+    pub exit_code: Option<i32>,
+    pub pod_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

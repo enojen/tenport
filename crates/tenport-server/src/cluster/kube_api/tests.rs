@@ -1,4 +1,4 @@
-use k8s_openapi::api::batch::v1::{Job, JobStatus};
+use k8s_openapi::api::batch::v1::{Job, JobCondition, JobStatus};
 use k8s_openapi::api::core::v1::{
     ContainerState, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod,
     PodStatus,
@@ -155,4 +155,55 @@ fn a_job_without_a_uid_is_left_out() {
     job.metadata.uid = None;
 
     assert_eq!(job_state(&job), None);
+}
+
+fn condition(kind: &str, reason: &str) -> JobCondition {
+    JobCondition {
+        type_: kind.to_owned(),
+        status: "True".to_owned(),
+        reason: Some(reason.to_owned()),
+        ..JobCondition::default()
+    }
+}
+
+#[test]
+fn a_job_past_its_deadline_is_failed_with_its_reason_even_without_a_failed_count() {
+    let job = job_with(JobStatus {
+        conditions: Some(vec![condition("Failed", "DeadlineExceeded")]),
+        ..JobStatus::default()
+    });
+    let state = job_state(&job).unwrap();
+    assert_eq!(state.phase, JobPhase::Failed);
+    assert_eq!(state.failed_reason.as_deref(), Some("DeadlineExceeded"));
+}
+
+#[test]
+fn a_complete_condition_ends_the_job_as_succeeded() {
+    let job = job_with(JobStatus {
+        conditions: Some(vec![condition("Complete", "CompletionsReached")]),
+        ..JobStatus::default()
+    });
+    let state = job_state(&job).unwrap();
+    assert_eq!(state.phase, JobPhase::Succeeded);
+    assert_eq!(state.failed_reason, None);
+}
+
+#[test]
+fn an_ended_box_gives_its_exit_code_and_an_evicted_pod_its_reason() {
+    let ended = ContainerState {
+        terminated: Some(ContainerStateTerminated {
+            reason: Some("Error".to_owned()),
+            exit_code: 137,
+            ..ContainerStateTerminated::default()
+        }),
+        ..ContainerState::default()
+    };
+    let mut pod = pod_with("p", 1, "Failed", vec![container("box", ended)]);
+    if let Some(status) = pod.status.as_mut() {
+        status.reason = Some("Evicted".to_owned());
+    }
+    let state = pod_state(&pod).unwrap();
+    assert_eq!(state.exit_code, Some(137));
+    assert_eq!(state.pod_reason.as_deref(), Some("Evicted"));
+    assert_eq!(state.reason.as_deref(), Some("Error"));
 }

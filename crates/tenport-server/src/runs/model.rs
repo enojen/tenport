@@ -144,9 +144,32 @@ pub struct RunFinished {
 pub struct RunEnd {
     pub phase: EndPhase,
     pub reason: Option<String>,
-    pub oom: bool,
+    pub exit_code: Option<i32>,
+    pub oom_kill: Option<u64>,
     pub output: Option<serde_json::Value>,
 }
+
+impl RunEnd {
+    pub fn unknown() -> Self {
+        Self::without_box(EndPhase::Unknown, None)
+    }
+
+    pub fn stopped() -> Self {
+        Self::without_box(EndPhase::Failed, Some(STOPPED.to_owned()))
+    }
+
+    fn without_box(phase: EndPhase, reason: Option<String>) -> Self {
+        Self {
+            phase,
+            reason,
+            exit_code: None,
+            oom_kill: None,
+            output: None,
+        }
+    }
+}
+
+const STOPPED: &str = "Stopped";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 pub enum EndPhase {
@@ -199,6 +222,7 @@ pub struct RunState {
     pub run: Run,
     pub phase: RunPhase,
     pub reason: Option<String>,
-    pub oom: Option<bool>,
+    pub exit_code: Option<i32>,
+    pub oom_kill: Option<u64>,
     pub output: Option<serde_json::Value>,
 }

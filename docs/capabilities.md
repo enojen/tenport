@@ -299,7 +299,7 @@ What the tenbox server and the CLI do, and where Tenport is:
 | The CLI makes the presigned links of the task archive, with the bucket keys on the computer | Done: Tenport makes them for its own Jobs; the CLI stops in step 6 |
 | `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Done |
 | A placeholder Secret for each new Job | Done |
-| `run.finished` when a box container ends, with the OOM count and the close output from the pod log | Done: with the output of every command, not of `close` only |
+| `run.finished` when a box container ends, with the OOM count and the close output from the pod log | Done: with the exit code and the output of every command, not of `close` only |
 | `GET /tasks/{task}/runs`: the runs of a task | Done as `GET /runs?project=<id>&task=<id>` |
 | Nodes, every 30 seconds: a worker that comes or goes, with its Hetzner type and hourly price | Step 8 |
 | Task volumes: their price, the deletion after the grace period and the ntfy notice | Not moved: no task volumes |
@@ -388,9 +388,15 @@ The steps, in order:
    `phase`, `reason` and `output` there: it never reads a log. A followed log is for a person,
    in a terminal or in the panel.
    Done (2026-11-18): `run.finished` holds `phase` (`Succeeded`, `Failed` or `Unknown`),
-   `reason`, `oom` and `output`. `output` is the last top-level JSON object of the box log, a
-   `{` line to a `}` line at column 0, as tenbox prints it; `oom` is true when the box
-   container was `OOMKilled` or its boot line counts an `oom_kill` above 0. Tenport writes it in
+   `reason`, `exit_code`, `oom_kill` and `output`. `reason` is the most exact one: the Job's
+   (`DeadlineExceeded`; not `BackoffLimitExceeded`, which only says the pod failed), else the
+   pod's (`Evicted`), else the box container's (`Completed`, `Error`, `OOMKilled`); a run that
+   `DELETE /runs/{name}` stops is `Failed` with `Stopped`. `exit_code` is the box container's,
+   the code of the tenbox command (`boot.sh` exits with it), 137 when the box was killed.
+   `oom_kill` is the count of the boot line: processes killed for memory inside a box that
+   went on, which no Kubernetes reason shows; null when the box wrote no boot line. `output`
+   is the last top-level JSON object of the box log, a `{` line to a `}` line at column 0, as
+   tenbox prints it. Tenport writes it in
    two places: a timer lists Tenport's Jobs every 30 seconds, and `GET /runs` and
    `GET /runs/{name}` write it when they see an ended Job first, so a session that sees
    `Succeeded` also sees `output`. A run has one `run.finished`; a second is refused. A run

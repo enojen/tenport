@@ -4,7 +4,9 @@ use k8s_openapi::api::batch::v1::Job;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tenport_server::accounts::{Role, Token};
-use tenport_server::cluster::{FakeCluster, JobName, JobPhase, PodName, PodState, SecretName};
+use tenport_server::cluster::{
+    Cluster, FakeCluster, JobName, JobPhase, PodName, PodState, SecretName,
+};
 use tenport_server::run_credentials::RunCredentialKey;
 
 use crate::server::TestServer;
@@ -206,6 +208,8 @@ fn started_pod(log: &str, run: &str) -> (JobName, PodState, String) {
         name: PodName::new(format!("{run}-abcde")),
         started: true,
         reason: None,
+        exit_code: None,
+        pod_reason: None,
     };
     (JobName::new(run), state, log.to_owned())
 }
@@ -256,6 +260,8 @@ async fn a_run_gives_its_fields_and_the_phase_and_reason_of_its_job() {
         name: PodName::new(format!("{name}-abcde")),
         started: true,
         reason: Some("OOMKilled".to_owned()),
+        exit_code: None,
+        pod_reason: None,
     };
     server.cluster.set_pod(&job, pod, "");
     let response = get(&server, &token, &format!("/runs/{name}")).await;
@@ -272,12 +278,15 @@ async fn a_run_gives_its_fields_and_the_phase_and_reason_of_its_job() {
 }
 
 #[tokio::test]
-async fn a_run_whose_job_is_gone_is_unknown() {
+async fn a_run_whose_job_went_before_its_end_was_seen_is_unknown() {
     let server = TestServer::start().await;
     let token = server.register("Wegobi", "enojen", Role::Admin).await;
     let (_, name) = started_run(&server, &token).await;
-    let response = delete(&server, &token, &format!("/runs/{name}")).await;
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    server
+        .cluster
+        .delete_job(&JobName::new(&name))
+        .await
+        .unwrap();
     assert!(server.cluster.jobs().is_empty());
     let run: Value = get(&server, &token, &format!("/runs/{name}"))
         .await
@@ -349,6 +358,8 @@ async fn the_log_of_a_run_whose_box_has_not_started_is_a_conflict_with_the_reaso
         name: PodName::new(format!("{name}-abcde")),
         started: false,
         reason: Some("CreateContainerConfigError".to_owned()),
+        exit_code: None,
+        pod_reason: None,
     };
     server.cluster.set_pod(&JobName::new(&name), pod, "");
     let response = get(&server, &token, &format!("/runs/{name}/log")).await;
@@ -466,32 +477,53 @@ tenbox-boot: memory peak 731 MiB, cpu 26 s, pids peak 81, oom_kill 0
 tenbox-boot: home saved to the task archive: 8.5M
 ";
 
-async fn ended_run(server: &TestServer, token: &Token, phase: JobPhase, log: &str) -> String {
+struct BoxEnd<'a> {
+    reason: &'a str,
+    exit_code: i32,
+    pod_reason: Option<&'a str>,
+    log: &'a str,
+}
+
+const COMPLETED: BoxEnd = BoxEnd {
+    reason: "Completed",
+    exit_code: 0,
+    pod_reason: None,
+    log: BUILD_LOG,
+};
+
+async fn ended_run(server: &TestServer, token: &Token, phase: JobPhase, end: BoxEnd<'_>) -> String {
     let (_, name) = started_run(server, token).await;
     let job = JobName::new(&name);
     server.cluster.set_phase(&job, phase);
     let pod = PodState {
         name: PodName::new(format!("{name}-abcde")),
         started: true,
-        reason: Some("Completed".to_owned()),
+        reason: Some(end.reason.to_owned()),
+        exit_code: Some(end.exit_code),
+        pod_reason: end.pod_reason.map(str::to_owned),
     };
-    server.cluster.set_pod(&job, pod, log);
+    server.cluster.set_pod(&job, pod, end.log);
     name
+}
+
+async fn run_of(server: &TestServer, token: &Token, name: &str) -> Value {
+    get(server, token, &format!("/runs/{name}"))
+        .await
+        .json()
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
 async fn an_ended_run_gives_the_output_of_its_command() {
     let server = TestServer::start().await;
     let token = server.register("Wegobi", "enojen", Role::Admin).await;
-    let name = ended_run(&server, &token, JobPhase::Succeeded, BUILD_LOG).await;
-    let run: Value = get(&server, &token, &format!("/runs/{name}"))
-        .await
-        .json()
-        .await
-        .unwrap();
+    let name = ended_run(&server, &token, JobPhase::Succeeded, COMPLETED).await;
+    let run = run_of(&server, &token, &name).await;
     assert_eq!(run["phase"], "Succeeded");
     assert_eq!(run["reason"], "Completed");
-    assert_eq!(run["oom"], false);
+    assert_eq!(run["exit_code"], 0);
+    assert_eq!(run["oom_kill"], 0);
     assert_eq!(run["output"], json!({ "ok": true, "task": "TEN-301" }));
 }
 
@@ -499,7 +531,7 @@ async fn an_ended_run_gives_the_output_of_its_command() {
 async fn an_ended_run_keeps_its_phase_reason_and_output_after_its_job_is_gone() {
     let server = TestServer::start().await;
     let token = server.register("Wegobi", "enojen", Role::Admin).await;
-    let name = ended_run(&server, &token, JobPhase::Failed, BUILD_LOG).await;
+    let name = ended_run(&server, &token, JobPhase::Failed, COMPLETED).await;
     get(&server, &token, &format!("/runs/{name}")).await;
     delete(&server, &token, &format!("/runs/{name}")).await;
     assert!(server.cluster.jobs().is_empty());
@@ -514,17 +546,97 @@ async fn an_ended_run_keeps_its_phase_reason_and_output_after_its_job_is_gone() 
 }
 
 #[tokio::test]
-async fn a_box_whose_process_was_killed_for_memory_is_oom() {
+async fn a_run_counts_the_processes_killed_for_memory_and_still_succeeds() {
     let server = TestServer::start().await;
     let token = server.register("Wegobi", "enojen", Role::Admin).await;
     let log = BUILD_LOG.replace("oom_kill 0", "oom_kill 2");
-    let name = ended_run(&server, &token, JobPhase::Failed, &log).await;
-    let run: Value = get(&server, &token, &format!("/runs/{name}"))
-        .await
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(run["oom"], true);
+    let end = BoxEnd {
+        log: &log,
+        ..COMPLETED
+    };
+    let name = ended_run(&server, &token, JobPhase::Succeeded, end).await;
+    let run = run_of(&server, &token, &name).await;
+    assert_eq!(run["phase"], "Succeeded");
+    assert_eq!(run["oom_kill"], 2);
+}
+
+#[tokio::test]
+async fn a_box_killed_for_memory_ends_oom_killed_with_exit_code_137() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let end = BoxEnd {
+        reason: "OOMKilled",
+        exit_code: 137,
+        pod_reason: None,
+        log: "tenbox-boot: ready\n",
+    };
+    let name = ended_run(&server, &token, JobPhase::Failed, end).await;
+    let run = run_of(&server, &token, &name).await;
+    assert_eq!(run["phase"], "Failed");
+    assert_eq!(run["reason"], "OOMKilled");
+    assert_eq!(run["exit_code"], 137);
+    assert_eq!(run["oom_kill"], Value::Null);
+    assert_eq!(run["output"], Value::Null);
+}
+
+#[tokio::test]
+async fn an_evicted_pod_ends_evicted_not_error() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let end = BoxEnd {
+        reason: "Error",
+        exit_code: 137,
+        pod_reason: Some("Evicted"),
+        log: "",
+    };
+    let name = ended_run(&server, &token, JobPhase::Failed, end).await;
+    server
+        .cluster
+        .fail(&JobName::new(&name), "BackoffLimitExceeded");
+    assert_eq!(run_of(&server, &token, &name).await["reason"], "Evicted");
+}
+
+#[tokio::test]
+async fn a_job_past_its_deadline_ends_deadline_exceeded() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let end = BoxEnd {
+        reason: "Error",
+        exit_code: 137,
+        pod_reason: None,
+        log: "",
+    };
+    let name = ended_run(&server, &token, JobPhase::Failed, end).await;
+    server
+        .cluster
+        .fail(&JobName::new(&name), "DeadlineExceeded");
+    let run = run_of(&server, &token, &name).await;
+    assert_eq!(run["reason"], "DeadlineExceeded");
+    assert_eq!(run["exit_code"], 137);
+}
+
+#[tokio::test]
+async fn a_stopped_run_ends_failed_and_stopped() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let (_, name) = started_run(&server, &token).await;
+    let response = delete(&server, &token, &format!("/runs/{name}")).await;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let run = run_of(&server, &token, &name).await;
+    assert_eq!(run["phase"], "Failed");
+    assert_eq!(run["reason"], "Stopped");
+    assert_eq!(run["exit_code"], Value::Null);
+}
+
+#[tokio::test]
+async fn stopping_an_ended_run_keeps_its_own_end() {
+    let server = TestServer::start().await;
+    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let name = ended_run(&server, &token, JobPhase::Succeeded, COMPLETED).await;
+    delete(&server, &token, &format!("/runs/{name}")).await;
+    let run = run_of(&server, &token, &name).await;
+    assert_eq!(run["phase"], "Succeeded");
+    assert_eq!(run["reason"], "Completed");
 }
 
 #[tokio::test]
@@ -539,5 +651,6 @@ async fn a_running_run_has_no_output_yet() {
         .unwrap();
     assert_eq!(run["phase"], "Running");
     assert_eq!(run["output"], Value::Null);
-    assert_eq!(run["oom"], Value::Null);
+    assert_eq!(run["exit_code"], Value::Null);
+    assert_eq!(run["oom_kill"], Value::Null);
 }

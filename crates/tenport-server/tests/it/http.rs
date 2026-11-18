@@ -132,6 +132,8 @@ async fn a_user_opens_five_followed_logs_at_most() {
         name: PodName::new(format!("{name}-abcde")),
         started: true,
         reason: None,
+        exit_code: None,
+        pod_reason: None,
     };
     server
         .cluster
