@@ -31,7 +31,7 @@ What Tenport must do. Each item has a status:
 | A project gets repository access when the GitHub App is installed on its repository. The login's GitHub account only says who the person is | Decided |
 | The tracker of a project is GitHub Issues or ClickUp | Decided |
 | GitHub Issues needs no extra connection: the App can write issues | Proposed |
-| ClickUp needs a personal token (`pk_…`) and a list id for the project. Tenport stores the token and gives it only to that project's agents | Proposed |
+| ClickUp needs a personal token (`pk_…`) and a list id for the project. Tenport stores the token and gives it only to that project's sessions and runs | Proposed |
 | ClickUp OAuth and webhooks. A webhook needs a public address: a Tailscale Funnel node that opens only the webhook path, with an HMAC check | Proposed, later |
 | Each project has its own steps, from its `tenbox.yaml`. Tenport sends them with the project | Decided |
 
@@ -77,12 +77,21 @@ The project gives the list of steps; the babysitter picks the steps of each task
 6. During the task, the babysitter can add a step, such as `debug` when a bug shows up in the
    build. It sends an event with the reason, and the panel shows the change.
 
-## 3. Claude subscriptions
+## 3. Agents
+
+Three names, decided 2026-11-18. An **agent** is a coding agent that a user connects, with its
+account: a kind (`claude-code` today; `codex` or `opencode` can come later), the account's
+login or key, and a name, such as "personal" or "work". A **session** is one agent at work
+(section 4). A **role** is the work of a session: `planner` or `babysitter`. Only the roles
+are the user's own workflow; projects, tasks, runs, agents and sessions do not know it, so a
+second workflow would change the roles only.
 
 | Capability | Status |
 |---|---|
-| A user adds one or more Claude subscriptions in the panel. Each has a name, such as "personal" or "work" | Decided |
-| An agent uses the Claude credential of the person who started it | Decided |
+| A user adds one or more agents in the panel, each with its kind, its account and its name | Decided |
+| A session and a run use an agent of the person who started them, never another person's | Decided |
+| A project has a default agent for each of its users. A session or a run names an agent, else it uses that default; with neither, Tenport refuses with 400 | Decided, 2026-11-18 |
+| The account of an agent is the Secret `agent-<agent id>` in namespace `tenbox`, and a Job reads the Secret of its agent. Today every Job reads the one Secret `claude-credentials` | Decided, 2026-11-18 |
 | Phase 1, one user: the claude.ai login, as today, and chat with Remote Control | Proposed |
 | Phase 2, other users: each organization brings its own API key, and the chat moves into Tenface with the Agent SDK | Proposed |
 | In phase 2, the API key belongs to the organization or to the user | Open |
@@ -100,40 +109,40 @@ What the Claude Code docs say (checked 2026-11-16):
   user must use their own API key, subscription or cloud provider credential. So if Tenyard is
   offered to other people, each organization brings its own API key.
 
-## 4. Lanes and agents
+## 4. Lanes and sessions
 
 | Capability | Status |
 |---|---|
-| Each project has one planner agent (Fable, `claude-fable-5-2`) | Decided |
+| Each project has one planner session (Fable, `claude-fable-5-2`) | Decided |
 | The planner opens the lanes. The panel has no "New lane" button | Decided |
-| Each lane has one babysitter agent (Opus, `claude-opus-5-5`) | Decided |
+| Each lane has one babysitter session (Opus, `claude-opus-5-5`) | Decided |
 | When a babysitter writes its "work done" report, Tenport wakes the planner | Decided |
-| An agent runs on the user's computer or on the server. The state is always in Tenport | Decided |
-| Tenport always starts a server agent. It writes "who started it" and "which project" into the pod. Claude Code does not know whose it is; Tenport tells it | Decided |
-| An agent on the computer calls Tenport with the user's login token, and sends its own agent id with each command. Tenport checks that the agent is the user's, and the log says "the user, through this agent" | Decided, 2026-11-16 |
-| An agent registers itself from inside its own session: Claude Code, OpenCode or another coding agent runs `tenbox planner start` or `tenbox babysitter start`. Tenport writes `agent.started` and gives an agent id; the CLI keeps it in `.tenbox/agent.json` in the agent's folder, which git ignores. One agent per folder: the planner in the project, each babysitter in its lane's worktree | Decided, 2026-11-16 |
-| An agent in a pod calls Tenport with a token that Tenport gives for that run | Open: decided with the server agents |
-| `tenbox planner start --server --claude personal` starts it on the server with the named subscription | Proposed |
-| `tenbox lane new <name>` is run by the planner. The lane's babysitter starts on the server and uses the subscription of the person who started the planner | Proposed |
-| The panel's Chat button opens the agent's session, wherever the agent runs | Proposed |
+| A session runs on the user's computer or on the server. The state is always in Tenport | Decided |
+| Tenport always starts a server session. It writes "who started it" and "which project" into the pod. Claude Code does not know whose it is; Tenport tells it | Decided |
+| A session on the computer calls Tenport with the user's login token, and sends its own session id with each command. Tenport checks that the session is the user's, and the log says "the user, through this session" | Decided, 2026-11-16 |
+| A session registers itself from inside: Claude Code, OpenCode or another coding agent runs `tenbox planner start` or `tenbox babysitter start`. Tenport writes `session.started` and gives a session id; the CLI keeps it in `.tenbox/session.json` in the session's folder, which git ignores. One session per folder: the planner in the project, each babysitter in its lane's worktree | Decided, 2026-11-16 |
+| A session in a pod calls Tenport with a token that Tenport gives for that run | Open: decided with the server sessions |
+| `tenbox planner start --server --agent personal` starts it on the server with the named agent | Proposed |
+| `tenbox lane new <name>` is run by the planner. The lane's babysitter starts on the server and uses the agent of the planner's session | Proposed |
+| The panel's Chat button opens the session, wherever it runs | Proposed |
 | A commit on the computer uses the user's git settings. A commit in a pod uses the App's name, with the person who started it as a `Co-authored-by` line | Proposed |
-| The `agents` part of `tenbox.yaml` gives the model and the skills of the planner and the babysitter | Proposed |
+| The `roles` part of `tenbox.yaml` gives the model and the skills of the planner and the babysitter | Proposed |
 | "Start planner" and "Stop" buttons in the panel, or only in the CLI. In the panel, they would be the first exception to "the panel only shows" | Open |
 
-### Messages between agents (proposed)
+### Messages between sessions (proposed)
 
 The planner and the babysitters talk through Tenport. There is no second service.
 
-1. An agent runs `tenbox message <to> "<text>"`. Tenport writes `message.sent` and opens an
+1. A session runs `tenbox message <to> "<text>"`. Tenport writes `message.sent` and opens an
    unread row for the receiver, as it does for a question.
 2. The receiver reads with `tenbox inbox`, and the row closes.
 3. Every message goes through Tenport, so the panel and the audit log show it.
-4. An agent talks only to its own planner or to its own babysitters, so that two agents do not
-   answer each other without end.
+4. A session talks only to its own planner or to its own babysitters, so that two sessions do
+   not answer each other without end.
 
-An agent that waits must wake up when a message comes. In Claude Code, `/loop` can run
+A session that waits must wake up when a message comes. In Claude Code, `/loop` can run
 `tenbox inbox` again and again; `tenbox inbox --wait` works for any coding agent. Which one works
-best is tried when the agents are built.
+best is tried when the sessions are built.
 
 ### A lane that runs on its own (proposed)
 
@@ -150,7 +159,7 @@ The proof loop of each task, in this order:
 2. A test that is red before the change and green after it.
 3. The checks of the project pass.
 4. A real run of the change.
-5. An independent review, by an agent that did not write the code.
+5. An independent review, by a reviewer that did not write the code.
 
 When a step fails again and again, the babysitter stops and asks the user (`question.asked`).
 
@@ -163,7 +172,7 @@ When a step fails again and again, the babysitter stops and asks the user (`ques
 | The placeholder is made from the Job's uid with a key. A changed key breaks the runs that are open at that time | Today |
 | Tenport reads the boot log of each ended pod and stores it as a `run.finished` event. It lists the runs of a task | Today |
 | The tracker key of a project goes to a Secret. Today the CLI writes it before each Job; Tenport will write it when an admin changes it, and keep no copy (section 9) | Decided |
-| The claude.ai login of the boxes is copied from the computer to a Secret. Tenport's Claude subscriptions replace this copy | Proposed |
+| The claude.ai login of the boxes is copied from the computer to a Secret. The agents of section 3 replace this copy | Decided, 2026-11-18 |
 
 ## 6. Events, costs and notices
 
@@ -180,7 +189,7 @@ When a step fails again and again, the babysitter stops and asks the user (`ques
 
 ### Every change is an event (decided, 2026-11-16)
 
-Every change reaches Tenport as an event: a task step, a question of an agent, an answer, a
+Every change reaches Tenport as an event: a task step, a question of a session, an answer, a
 node that comes or goes. Tenport writes the event to a log that is never changed. In the same
 transaction it updates the tables that hold the state now, and the SSE stream tells the panel.
 
@@ -188,7 +197,7 @@ transaction it updates the tables that hold the state now, and the SSE stream te
 - A broken table can be built again from the log. Tenport does not replay the log on each
   start: this is not full event sourcing.
 - Each event type is a Rust type, with one function that updates the tables.
-- Every command that changes the state sends an event, from a person or from an agent. A command
+- Every command that changes the state sends an event, from a person or from a session. A command
   that only reads, such as `status`, sends none. Tenport writes who did it from the token, so the
   log is the audit (decided, 2026-11-16).
 - An event type that is out only gets new fields, and a new field is optional. A field never
@@ -214,8 +223,8 @@ Rules from the panel's RAM measurements (2026-11-15). Low browser RAM is the use
 |---|---|
 | The panel reads the state over SSE | Decided |
 | On connect and on each reconnect, Tenport sends the full state at once: a summary of all projects and the full task tree of the project in view | Decided |
-| The summary of a project has its name, its lane counts and the question counts of each agent. Only the project in view gets its task tree | Decided |
-| Finished tasks and agent notes go with a limit (the last N), so the state does not grow without end | Decided |
+| The summary of a project has its name, its lane counts and the question counts of each session. Only the project in view gets its task tree | Decided |
+| Finished tasks and session notes go with a limit (the last N), so the state does not grow without end | Decided |
 | The stream always answers 200 with the SSE content type. Any other answer stops the browser's retries, and the panel stays offline | Decided |
 | `Cache-Control: no-cache`, and no buffering on any proxy in between | Decided |
 | Tenport refuses a move that puts a task under itself or under one of its children. The panel only shows what it gets | Decided |
@@ -225,7 +234,7 @@ Rules from the panel's RAM measurements (2026-11-15). Low browser RAM is the use
 ## 8. What stays outside Tenport
 
 - The git and worktree work, the checks and the PR: the CLI does them where the code is.
-- The plan, build and close workflows and the skills: they stay with the agents. They write their
+- The plan, build and close workflows and the skills: they stay with the coding agents. They write their
   state to Tenport instead of to local files.
 - The cluster's manifests and its own Secrets: they stay in the `tenyard` repository. The
   Secrets `project-<project id>` are the exception: Tenport writes them (section 9).
@@ -233,7 +242,7 @@ Rules from the panel's RAM measurements (2026-11-15). Low browser RAM is the use
 ## 9. The move from the tenbox server
 
 Tenport takes over every job of the tenbox server, and every talk with the cluster, one PR at a
-time. In the end only Tenport talks to Kubernetes: the CLI on a computer and the agent in a box
+time. In the end only Tenport talks to Kubernetes: the CLI on a computer and the session in a box
 send their requests to Tenport, and a computer keeps only `TENPORT_URL` and `TENPORT_TOKEN`; no
 kubeconfig, no bucket keys, no project secrets. Then `server/` and the CLI's Kubernetes code are
 deleted from tenbox. The live server runs the image of tenbox commit `71dbd66`; no commit after it
@@ -269,7 +278,8 @@ Decided (2026-11-17):
   until it ships, Tenport fills `__PROJECT__` (the `project` label and `TENBOX_PROJECT`) with the
   name as a label value: each character other than a letter, a digit, `-`, `_` or `.` becomes
   `-`, at most 63 characters, ends that are not a letter or a digit cut, and the project id when
-  nothing is left.
+  nothing is left. The `project` label stays the name after the move (decided, 2026-11-18): it is
+  for reading in kubectl and Grafana; `project-id` is the one that matches.
 
 What the tenbox server and the CLI do, and where Tenport is:
 
@@ -368,8 +378,8 @@ The steps, in order:
      PR as the App (tenbox-demo #20).
 5. The runs: `run.finished`, so `GET /runs?project=<id>&task=<id>` and `GET /runs/{name}` keep
    the phase after the Job is deleted. `run.finished` also keeps the JSON result of the tenbox
-   command (the last JSON line of the box log) as `output`, and `GET /runs/{name}` gives it. An
-   agent waits for a run with `GET /runs/{name}` until `phase` is not `Running`, and reads
+   command (the last JSON line of the box log) as `output`, and `GET /runs/{name}` gives it. A
+   session waits for a run with `GET /runs/{name}` until `phase` is not `Running`, and reads
    `phase`, `reason` and `output` there: it never reads a log. A followed log is for a person,
    in a terminal or in the panel.
 6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/rm/ls` go to
@@ -378,11 +388,13 @@ The steps, in order:
      cannot start, such as with `CreateContainerConfigError`, because that reason does not
      go away alone. The 409 `box-not-started` carries the reason, so the CLI can stop on a
      reason that is an error and show it.
-   - To decide here: one project has two ids today. `tenbox.yaml` holds the CLI's
-     (`tenbox-demo`: `rw68a5`), and Tenport made its own at `POST /projects` (`7ihtah`). The
-     task archive key and the box's directories come from the id, so the CLI and Tenport
-     would use two archives for one task.
-7. The agent in a box reaches Tenport from inside the cluster with a run token that starts runs
+   - One project, one id: Tenport's (decided, 2026-11-18). Today a project can have two:
+     `tenbox.yaml` holds the CLI's (`tenbox-demo`: `rw68a5`), and Tenport made its own at
+     `POST /projects` (`7ihtah`). The task archive key and the box's directories come from the
+     id, so the two would use two archives for one task. `tenbox.yaml` takes the id that
+     `POST /projects` gives, as `tenbox init` does (section 2); the old archives expire after
+     30 days.
+7. A session in a box reaches Tenport from inside the cluster with a run token that starts runs
    in its own project only, with a limit on nested runs and on open runs at one time.
 8. The cluster watch: nodes, with their Hetzner type and price.
 9. Costs: `GET /costs`, the `costs` command and `GET /metrics`, with the workers and the bucket.
