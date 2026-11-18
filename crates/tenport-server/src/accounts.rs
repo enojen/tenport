@@ -49,7 +49,10 @@ pub struct AddedUser {
 
 pub async fn add_user(db: &Db, actor: Actor, new: NewUser) -> Result<AddedUser, AccountsError> {
     let mut events = Vec::new();
-    let organization = find_or_new_organization(db, &new.organization_name, &mut events).await?;
+    let organization = match find_organization_id(db, &new.organization_name).await? {
+        Some(id) => id,
+        None => add_organization(&mut events, &new.organization_name),
+    };
     let user = UserId::random();
     let token = Token::random();
     events.push(user_added(&user, &new));
@@ -110,15 +113,15 @@ pub(crate) async fn apply(
     Ok(())
 }
 
-async fn find_or_new_organization(
+async fn find_organization_id(
     db: &Db,
     name: &Name,
-    events: &mut Vec<Event>,
-) -> Result<OrganizationId, AccountsError> {
+) -> Result<Option<OrganizationId>, AccountsError> {
     let mut conn = db.acquire().await?;
-    if let Some(id) = store::find_organization_id_by_name(&mut conn, name).await? {
-        return Ok(id);
-    }
+    Ok(store::find_organization_id_by_name(&mut conn, name).await?)
+}
+
+fn add_organization(events: &mut Vec<Event>, name: &Name) -> OrganizationId {
     let id = OrganizationId::random();
     events.push(Event::Accounts(AccountsEvent::OrganizationAdded(
         OrganizationAdded {
@@ -126,7 +129,7 @@ async fn find_or_new_organization(
             name: name.clone(),
         },
     )));
-    Ok(id)
+    id
 }
 
 fn user_added(id: &UserId, user: &NewUser) -> Event {
