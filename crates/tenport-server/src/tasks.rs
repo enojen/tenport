@@ -19,7 +19,7 @@ pub use model::{TaskClosed, TaskDeleted, TaskId, TaskIdError, TaskStarted, Tasks
 #[derive(Debug, thiserror::Error)]
 pub enum TasksError {
     #[error("only Tenport writes {kind}: send DELETE /tasks/{{task}}?project=<id>")]
-    NotReported { kind: &'static str },
+    EventNotAllowed { kind: &'static str },
     #[error(transparent)]
     Projects(#[from] ProjectsError),
     #[error(transparent)]
@@ -44,7 +44,7 @@ pub async fn record_events(
     user: &UserId,
     reported: Vec<Reported>,
 ) -> Result<Recorded, TasksError> {
-    require_reported_kinds(&reported)?;
+    require_allowed_events(&reported)?;
     require_member_of_all(db, user, &reported).await?;
     let entries: Vec<Entry> = reported
         .into_iter()
@@ -81,12 +81,12 @@ pub(crate) async fn apply(
     }
 }
 
-fn require_reported_kinds(reported: &[Reported]) -> Result<(), TasksError> {
+fn require_allowed_events(reported: &[Reported]) -> Result<(), TasksError> {
     match reported
         .iter()
         .find(|r| matches!(r.event, TasksEvent::TaskDeleted(_)))
     {
-        Some(r) => Err(TasksError::NotReported {
+        Some(r) => Err(TasksError::EventNotAllowed {
             kind: r.event.kind(),
         }),
         None => Ok(()),
