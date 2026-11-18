@@ -7,7 +7,7 @@ use super::auth::Injector;
 use super::error::{HttpError, PROBLEM_JSON, Problem, TooManyRequests, Unavailable};
 use super::extract::Json;
 use crate::github::GithubError;
-use crate::runs::RunsError;
+use crate::run_credentials::RunCredentialsError;
 
 #[derive(Deserialize, ToSchema)]
 pub struct RunCredentialRequest {
@@ -42,16 +42,17 @@ pub async fn run_credential(
     Json(body): Json<RunCredentialRequest>,
 ) -> Result<Json<RunCredential>, HttpError> {
     let value = state
-        .runs
-        .run_credential(&state.db, &body.placeholder, &body.host)
+        .run_credentials
+        .repo_token(&state.db, &body.placeholder, &body.host)
         .await
         .map_err(run_credential_error)?;
     Ok(Json(RunCredential { value }))
 }
 
-fn run_credential_error(error: RunsError) -> HttpError {
+fn run_credential_error(error: RunCredentialsError) -> HttpError {
     match error {
-        RunsError::NoRunCredential { .. } | RunsError::Github(GithubError::NotInstalled { .. }) => {
+        RunCredentialsError::NoRunCredential { .. }
+        | RunCredentialsError::Github(GithubError::NotInstalled { .. }) => {
             HttpError::NotFound(error.to_string())
         }
         other => HttpError::internal(other),

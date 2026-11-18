@@ -10,7 +10,7 @@ use tenport_server::events::Actor;
 use tenport_server::github::GithubApp;
 use tenport_server::http::{AppState, Limiter, Limits, router};
 use tenport_server::name::Name;
-use tenport_server::run_credentials::{InjectorToken, RunCredentialKey};
+use tenport_server::run_credentials::{InjectorToken, RunCredentialKey, RunCredentials};
 use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::task_archives::TaskArchiveBucket;
 use tokio::net::TcpListener;
@@ -45,11 +45,19 @@ impl TestServer {
         let cluster = Arc::new(cluster);
         let bucket = FakeBucket::start().await;
         let github = FakeGithub::start().await;
-        let runs = runs_on(cluster.clone(), &bucket.url, &github.url);
+        let task_archives = Arc::new(test_bucket(&bucket.url));
+        let run_credentials = Arc::new(run_credentials_on(cluster.clone(), &github.url));
+        let runs = runs_on(
+            cluster.clone(),
+            task_archives.clone(),
+            run_credentials.clone(),
+        );
         let app = router(AppState {
             db: db.clone(),
             cluster: cluster.clone(),
             runs: Arc::new(runs),
+            run_credentials,
+            task_archives,
             injector_token: Arc::new(InjectorToken::new(INJECTOR_TOKEN)),
             limiter: Arc::new(Limiter::new(limits)),
         });
@@ -88,7 +96,11 @@ impl TestServer {
     }
 }
 
-fn runs_on(cluster: Arc<FakeCluster>, bucket_url: &str, github_url: &str) -> Runs {
+fn runs_on(
+    cluster: Arc<FakeCluster>,
+    task_archives: Arc<TaskArchiveBucket>,
+    run_credentials: Arc<RunCredentials>,
+) -> Runs {
     let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
     let template = RunTemplate {
         dir: tests.join("run-template"),
@@ -98,7 +110,14 @@ fn runs_on(cluster: Arc<FakeCluster>, bucket_url: &str, github_url: &str) -> Run
         cluster,
         template,
         "box:1".to_owned(),
-        test_bucket(bucket_url),
+        task_archives,
+        run_credentials,
+    )
+}
+
+fn run_credentials_on(cluster: Arc<FakeCluster>, github_url: &str) -> RunCredentials {
+    RunCredentials::new(
+        cluster,
         RunCredentialKey::new(RUN_CREDENTIAL_KEY),
         GithubApp::new(GITHUB_APP_ID, GITHUB_APP_KEY, github_url).unwrap(),
     )

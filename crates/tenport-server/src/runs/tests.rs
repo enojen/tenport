@@ -1,10 +1,9 @@
 use std::path::Path;
 
 use super::*;
-use crate::accounts::{OrgId, Role};
+use crate::accounts::Role;
 use crate::fixtures::{project_of, register};
-use crate::projects::Repo;
-use crate::run_credentials::RunCredentialKey;
+use crate::run_credentials::{RunCredentialKey, RunCredentials};
 use crate::task_archives::TaskArchiveBucket;
 use std::time::Duration;
 
@@ -22,13 +21,17 @@ fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
         dir: tests.join("run-template"),
         services_dir: tests.join("run-services"),
     };
+    let run_credentials = RunCredentials::new(
+        cluster.clone(),
+        RunCredentialKey::new(RUN_CREDENTIAL_KEY),
+        test_github(),
+    );
     Runs::new(
         cluster,
         template,
         "box:1".to_owned(),
-        test_bucket(),
-        RunCredentialKey::new(RUN_CREDENTIAL_KEY),
-        test_github(),
+        Arc::new(test_bucket()),
+        Arc::new(run_credentials),
     )
 }
 
@@ -123,12 +126,6 @@ async fn only_a_member_of_the_projects_organization_starts_a_run() {
     assert!(cluster.jobs().is_empty());
 }
 
-#[test]
-fn the_run_stamp_is_month_day_and_time_in_utc() {
-    let at = OffsetDateTime::from_unix_timestamp(1_794_906_303).unwrap();
-    assert_eq!(run_stamp(at), "1117-090503");
-}
-
 pub const RUN_CREDENTIAL_KEY: &str = "key-for-tests";
 
 fn test_github() -> crate::github::GithubApp {
@@ -144,32 +141,6 @@ fn test_bucket() -> TaskArchiveBucket {
         "key-secret".to_owned(),
     )
     .unwrap()
-}
-
-fn project_named(name: &str) -> Project {
-    Project {
-        id: ProjectId::parse("7ihtah").unwrap(),
-        org: OrgId::parse("o-5bt4rj").unwrap(),
-        name: Name::parse(name).unwrap(),
-        repo: Repo::parse("enojen/tenport").unwrap(),
-    }
-}
-
-#[test]
-fn a_long_project_label_is_cut_to_63_characters_that_end_in_a_letter_or_digit() {
-    let name = format!("{}-.x", "a".repeat(61));
-
-    let label = project_label(&project_named(&name));
-
-    assert_eq!(label, "a".repeat(61));
-}
-
-#[test]
-fn a_project_name_that_is_a_label_value_stays_as_it_is() {
-    assert_eq!(
-        project_label(&project_named("Tenbox_demo.2")),
-        "Tenbox_demo.2"
-    );
 }
 
 async fn count_run_finished(db: &Db) -> i64 {

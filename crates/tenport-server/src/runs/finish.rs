@@ -5,8 +5,8 @@ use futures::AsyncReadExt;
 use serde_json::Value;
 
 use super::model::{Finish, FinishedPhase, Run, RunFinished, RunPhase, RunState, RunsEvent};
-use super::{Runs, RunsError, TENPORT_JOBS, find_job_in, find_run, store};
-use crate::cluster::{ClusterError, JobPhase, JobState, LogRead, PodName, PodState};
+use super::{Runs, RunsError, find_job_in, find_run, store};
+use crate::cluster::{ClusterError, JobPhase, JobState, LogRead, PodName, PodState, TENPORT_JOBS};
 use crate::db::Db;
 use crate::events::{self, Actor, Event, EventsError};
 

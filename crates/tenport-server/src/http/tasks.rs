@@ -11,7 +11,7 @@ use super::extract::{Json, Path, Query};
 use crate::projects::ProjectId;
 use crate::runs::RunsError;
 use crate::task_archives::TaskArchiveState;
-use crate::tasks::TaskId;
+use crate::tasks::{self, TaskId, TasksError};
 
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
@@ -49,11 +49,16 @@ pub async fn delete_task(
     Path(task): Path<TaskId>,
     Query(query): Query<TaskProject>,
 ) -> Result<Json<DeletedTask>, HttpError> {
-    let archive = state
-        .runs
-        .delete_task(&state.db, &user.id, &query.project, &task)
-        .await
-        .map_err(delete_error)?;
+    let archive = tasks::delete_task(
+        &state.db,
+        &state.runs,
+        &state.task_archives,
+        &user.id,
+        &query.project,
+        &task,
+    )
+    .await
+    .map_err(delete_error)?;
     Ok(Json(DeletedTask {
         project: query.project.to_string(),
         task: task.to_string(),
@@ -61,10 +66,10 @@ pub async fn delete_task(
     }))
 }
 
-fn delete_error(error: RunsError) -> HttpError {
+fn delete_error(error: TasksError) -> HttpError {
     match error {
-        RunsError::Projects(error) => error.into(),
-        RunsError::Busy { .. } => HttpError::MachineBusy(error.to_string()),
+        TasksError::Projects(error) => error.into(),
+        TasksError::Runs(RunsError::Busy { .. }) => HttpError::MachineBusy(error.to_string()),
         other => HttpError::internal(other),
     }
 }

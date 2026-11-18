@@ -1,48 +1,40 @@
 mod command;
 mod finish;
+mod job;
 mod model;
-mod repo_tokens;
 mod store;
-mod template;
 
 #[cfg(test)]
 mod tests;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use sqlx::SqliteConnection;
 use time::OffsetDateTime;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 
 use crate::accounts::{Email, UserId};
-use crate::github::{GithubApp, GithubError, RepoToken};
-use crate::run_credentials::{RUN_TOKEN_KEY, RunCredentialKey, run_token_secret};
-use crate::task_archives::{TaskArchiveBucket, TaskArchiveState, TaskArchivesError};
+use crate::run_credentials::{RUN_TOKEN_KEY, RunCredentials, run_token_secret};
+use crate::task_archives::TaskArchiveBucket;
 use futures::future::try_join_all;
 
 use crate::cluster::{
-    Cluster, ClusterError, CreatedJob, JobName, JobState, JobUid, LogRead, LogReader, PodState,
+    Cluster, ClusterError, CreatedJob, JobName, JobState, LogRead, LogReader, PodState,
 };
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
 use crate::name::Name;
 use crate::projects::{self, Project, ProjectId, ProjectsError};
-use crate::tasks::{TaskDeleted, TaskId, TasksEvent};
+use crate::tasks::TaskId;
 
 pub use command::{Command, CommandError, CommandName, command_rules};
+pub use job::{RunTemplate, TemplateError};
 pub use model::{
     Branch, BranchError, ClassName, ClassNameError, Finish, FinishedPhase, Run, RunFinished,
     RunName, RunNameError, RunPhase, RunStarted, RunState, RunsEvent, ServiceName,
     ServiceNameError,
 };
-pub use template::{RunTemplate, TemplateError};
-
-use template::TemplateFields;
-
-const GITHUB: &str = "https://github.com";
-const TENPORT_JOBS: &str = "app.kubernetes.io/managed-by=tenport";
-const LABEL_VALUE_MAX: usize = 63;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunsError {
@@ -61,12 +53,6 @@ pub enum RunsError {
     Busy { task: TaskId, jobs: Vec<String> },
     #[error(transparent)]
     Template(#[from] TemplateError),
-    #[error(transparent)]
-    TaskArchives(#[from] TaskArchivesError),
-    #[error("no open Job of Tenport has this placeholder for {host}")]
-    NoRunCredential { host: String },
-    #[error(transparent)]
-    Github(#[from] GithubError),
     #[error(transparent)]
     Cluster(#[from] ClusterError),
     #[error(transparent)]
@@ -107,10 +93,8 @@ pub struct Runs {
     cluster: Arc<dyn Cluster>,
     template: RunTemplate,
     box_image: String,
-    task_archives: TaskArchiveBucket,
-    run_credential_key: RunCredentialKey,
-    github: GithubApp,
-    repo_tokens: std::sync::Mutex<HashMap<JobUid, RepoToken>>,
+    task_archives: Arc<TaskArchiveBucket>,
+    run_credentials: Arc<RunCredentials>,
     start_lock: Mutex<()>,
 }
 
@@ -119,18 +103,15 @@ impl Runs {
         cluster: Arc<dyn Cluster>,
         template: RunTemplate,
         box_image: String,
-        task_archives: TaskArchiveBucket,
-        run_credential_key: RunCredentialKey,
-        github: GithubApp,
+        task_archives: Arc<TaskArchiveBucket>,
+        run_credentials: Arc<RunCredentials>,
     ) -> Self {
         Self {
             cluster,
             template,
             box_image,
             task_archives,
-            run_credential_key,
-            github,
-            repo_tokens: std::sync::Mutex::default(),
+            run_credentials,
             start_lock: Mutex::new(()),
         }
     }
@@ -155,18 +136,15 @@ impl Runs {
         project: &Project,
         new: &NewRun,
     ) -> Result<RunName, RunsError> {
-        // Careful: two limits of this lock.
-        // 1. One lock for all tasks: starts of different tasks also wait for each other.
-        //    A start holds it for one Job list and one Job create, so this is fine while
-        //    starts are rare. If many starts come at once, use a lock per task, and keep
-        //    the map of locks from growing without end.
-        // 2. It works only with one Tenport replica: the lock lives in one process.
-        //    With two replicas the race comes back. Before that, move the check to a
-        //    place both replicas share: a fixed Job name per task (Kubernetes answers
-        //    409 to the second create), or a row in the database.
-        let _one_start_at_a_time = self.start_lock.lock().await;
-        self.require_idle(project, &new.task).await?;
-        let fields = self.fields(project, new, OffsetDateTime::now_utc());
+        let _idle = self.lock_idle_task(project, &new.task).await?;
+        let archive = self.task_archives.presign(&project.id, &new.task);
+        let fields = job::fields(
+            project,
+            new,
+            &self.box_image,
+            archive,
+            OffsetDateTime::now_utc(),
+        );
         let job = self.template.job(&fields, &new.services).await?;
         let created = self.cluster.create_job(job).await?;
         if let Err(error) = self.write_run_token_secret(&created).await {
@@ -177,7 +155,7 @@ impl Runs {
     }
 
     async fn write_run_token_secret(&self, job: &CreatedJob) -> Result<(), RunsError> {
-        let placeholder = self.run_credential_key.placeholder(&job.uid);
+        let placeholder = self.run_credentials.placeholder(&job.uid);
         let secret = run_token_secret(&job.name);
         self.cluster
             .create_job_secret(&secret, job, RUN_TOKEN_KEY, &placeholder)
@@ -234,26 +212,6 @@ impl Runs {
         }
     }
 
-    pub async fn delete_task(
-        &self,
-        db: &Db,
-        user: &UserId,
-        project: &ProjectId,
-        task: &TaskId,
-    ) -> Result<TaskArchiveState, RunsError> {
-        let project = projects::require_member(db, user, project).await?;
-        let _no_start_meanwhile = self.start_lock.lock().await;
-        self.require_idle(&project, task).await?;
-        let archive = self.task_archives.delete(&project.id, task).await?;
-        let deleted = TaskDeleted {
-            project: project.id,
-            task: task.clone(),
-        };
-        let event = Event::Tasks(TasksEvent::TaskDeleted(deleted));
-        events::append(db, Actor::User(user.clone()), event).await?;
-        Ok(archive)
-    }
-
     pub async fn stop(&self, db: &Db, user: &UserId, name: &RunName) -> Result<(), RunsError> {
         let run = find_run_for_member(db, user, name).await?;
         let job = self.find_job(&run).await?;
@@ -299,6 +257,25 @@ impl Runs {
         Ok(self.cluster.list_jobs(&selector).await?)
     }
 
+    pub async fn lock_idle_task(
+        &self,
+        project: &Project,
+        task: &TaskId,
+    ) -> Result<MutexGuard<'_, ()>, RunsError> {
+        // Careful: two limits of this lock.
+        // 1. One lock for all tasks: starts of different tasks also wait for each other.
+        //    A start holds it for one Job list and one Job create, so this is fine while
+        //    starts are rare. If many starts come at once, use a lock per task, and keep
+        //    the map of locks from growing without end.
+        // 2. It works only with one Tenport replica: the lock lives in one process.
+        //    With two replicas the race comes back. Before that, move the check to a
+        //    place both replicas share: a fixed Job name per task (Kubernetes answers
+        //    409 to the second create), or a row in the database.
+        let idle = self.start_lock.lock().await;
+        self.require_idle(project, task).await?;
+        Ok(idle)
+    }
+
     async fn require_idle(&self, project: &Project, task: &TaskId) -> Result<(), RunsError> {
         let jobs = self.list_jobs_of_task(&project.id, task).await?;
         let running: Vec<String> = jobs
@@ -313,31 +290,6 @@ impl Runs {
                 task: task.clone(),
                 jobs: running,
             })
-        }
-    }
-
-    fn fields(&self, project: &Project, new: &NewRun, now: OffsetDateTime) -> TemplateFields {
-        let kube_task = kube_name(&new.task);
-        let run = run_stamp(now);
-        let archive = self.task_archives.presign(&project.id, &new.task);
-        TemplateFields {
-            name: kube_task,
-            task: new.task.to_string(),
-            run,
-            project: project_label(project),
-            project_id: project.id.to_string(),
-            repo: format!("{GITHUB}/{}.git", project.repo.as_str()),
-            base: new.base.as_str().to_owned(),
-            git_name: new.author.name.as_str().to_owned(),
-            git_email: new.author.email.to_string(),
-            image: self.box_image.clone(),
-            command: new.command.name().as_str().to_owned(),
-            cmd: new.command.shell_line(),
-            env: new.env.clone(),
-            class: new.class.clone(),
-            archive_get: archive.get,
-            archive_put: archive.put,
-            setup: new.setup.clone(),
         }
     }
 }
@@ -368,43 +320,6 @@ async fn list_runs_of_task(
 fn find_job_in<'a>(jobs: &'a [JobState], run: &Run) -> Option<&'a JobState> {
     jobs.iter()
         .find(|job| job.name.as_str() == run.name.as_str())
-}
-
-fn project_label(project: &Project) -> String {
-    let mut value = String::new();
-    for char in project.name.as_str().chars() {
-        if is_label_char(char) {
-            value.push(char);
-        } else if !value.ends_with('-') {
-            value.push('-');
-        }
-    }
-    let value: String = value.chars().take(LABEL_VALUE_MAX).collect();
-    let value = value.trim_matches(|char: char| !char.is_ascii_alphanumeric());
-    if value.is_empty() {
-        project.id.to_string()
-    } else {
-        value.to_owned()
-    }
-}
-
-fn is_label_char(char: char) -> bool {
-    char.is_ascii_alphanumeric() || matches!(char, '-' | '_' | '.')
-}
-
-fn kube_name(task: &TaskId) -> String {
-    task.to_string().to_lowercase().replace('_', "-")
-}
-
-fn run_stamp(now: OffsetDateTime) -> String {
-    format!(
-        "{:02}{:02}-{:02}{:02}{:02}",
-        u8::from(now.month()),
-        now.day(),
-        now.hour(),
-        now.minute(),
-        now.second()
-    )
 }
 
 pub(crate) async fn apply(
