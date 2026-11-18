@@ -37,6 +37,7 @@ pub use template::{RunTemplate, TemplateError};
 use template::TemplateFields;
 
 const GITHUB: &str = "https://github.com";
+const LABEL_VALUE_MAX: usize = 63;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunsError {
@@ -278,7 +279,7 @@ impl Runs {
             name: kube_task,
             task: new.task.to_string(),
             run,
-            project: project.name.as_str().to_owned(),
+            project: project_label(project),
             project_id: project.id.to_string(),
             repo: format!("{GITHUB}/{}.git", project.repo.as_str()),
             base: new.base.as_str().to_owned(),
@@ -322,6 +323,28 @@ async fn list_runs_of_task(
 fn find_job_in<'a>(jobs: &'a [JobState], run: &Run) -> Option<&'a JobState> {
     jobs.iter()
         .find(|job| job.name.as_str() == run.name.as_str())
+}
+
+fn project_label(project: &Project) -> String {
+    let mut value = String::new();
+    for char in project.name.as_str().chars() {
+        if is_label_char(char) {
+            value.push(char);
+        } else if !value.ends_with('-') {
+            value.push('-');
+        }
+    }
+    let value: String = value.chars().take(LABEL_VALUE_MAX).collect();
+    let value = value.trim_matches(|char: char| !char.is_ascii_alphanumeric());
+    if value.is_empty() {
+        project.id.to_string()
+    } else {
+        value.to_owned()
+    }
+}
+
+fn is_label_char(char: char) -> bool {
+    char.is_ascii_alphanumeric() || matches!(char, '-' | '_' | '.')
 }
 
 fn kube_name(task: &TaskId) -> String {

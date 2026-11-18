@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use super::*;
-use crate::accounts::Role;
+use crate::accounts::{OrgId, Role};
 use crate::fixtures::{project_of, register};
+use crate::projects::Repo;
 use crate::task_archives::TaskArchiveBucket;
 use std::time::Duration;
 
@@ -128,4 +129,30 @@ fn test_bucket() -> TaskArchiveBucket {
         "key-secret".to_owned(),
     )
     .unwrap()
+}
+
+fn project_named(name: &str) -> Project {
+    Project {
+        id: ProjectId::parse("7ihtah").unwrap(),
+        org: OrgId::parse("o-5bt4rj").unwrap(),
+        name: Name::parse(name).unwrap(),
+        repo: Repo::parse("enojen/tenport").unwrap(),
+    }
+}
+
+#[test]
+fn a_long_project_label_is_cut_to_63_characters_that_end_in_a_letter_or_digit() {
+    let name = format!("{}-.x", "a".repeat(61));
+
+    let label = project_label(&project_named(&name));
+
+    assert_eq!(label, "a".repeat(61));
+}
+
+#[test]
+fn a_project_name_that_is_a_label_value_stays_as_it_is() {
+    assert_eq!(
+        project_label(&project_named("Tenbox_demo.2")),
+        "Tenbox_demo.2"
+    );
 }
