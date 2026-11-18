@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::model::{Finish, FinishedPhase, Run, RunFinished, RunPhase, RunState, RunsEvent};
 use super::{Runs, RunsError, find_job_in, find_run, store};
-use crate::cluster::{ClusterError, JobPhase, JobState, LogRead, PodName, PodState, TENPORT_JOBS};
+use crate::cluster::{ClusterError, JobPhase, JobState, PodName, PodState, TENPORT_JOBS};
 use crate::db::Db;
 use crate::events::{self, Actor, Event, EventsError};
 
@@ -129,7 +129,7 @@ impl Runs {
     }
 
     async fn read_whole_log(&self, pod: &PodName) -> Result<String, RunsError> {
-        let mut reader = match self.cluster.read_log(pod, LogRead::default()).await {
+        let mut reader = match self.cluster.read_log(pod, false).await {
             Err(ClusterError::NoPod(_)) => return Ok(String::new()),
             other => other?,
         };

@@ -11,8 +11,8 @@ use k8s_openapi::api::batch::v1::Job;
 
 use super::Cluster;
 use super::model::{
-    ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogRead, LogReader, PodName,
-    PodState, SecretName,
+    ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogReader, PodName, PodState,
+    SecretName,
 };
 
 type SecretData = BTreeMap<String, String>;
@@ -160,7 +160,7 @@ impl FakeCluster {
             .map(|pod| pod.state.clone())
     }
 
-    fn open_log(&self, pod: &PodName, read: LogRead) -> Result<LogReader, ClusterError> {
+    fn open_log(&self, pod: &PodName, follow: bool) -> Result<LogReader, ClusterError> {
         let jobs = self.lock();
         let found = jobs.values().find_map(|fake| {
             let found = fake.pod.as_ref().filter(|found| found.state.name == *pod)?;
@@ -168,7 +168,7 @@ impl FakeCluster {
         });
         let (phase, log) = found.ok_or_else(|| ClusterError::NoPod(pod.clone()))?;
         let written = Cursor::new(log.into_bytes());
-        if read.follow && phase == JobPhase::Running {
+        if follow && phase == JobPhase::Running {
             return Ok(Box::pin(BufReader::new(written.chain(StillRunning))));
         }
         Ok(Box::pin(written))
@@ -205,9 +205,9 @@ impl Cluster for FakeCluster {
     fn read_log<'a>(
         &'a self,
         pod: &'a PodName,
-        read: LogRead,
+        follow: bool,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>> {
-        ready(self.open_log(pod, read)).boxed()
+        ready(self.open_log(pod, follow)).boxed()
     }
 
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {

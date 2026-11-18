@@ -11,8 +11,8 @@ use serde_json::{Value, json};
 
 use super::Cluster;
 use super::model::{
-    ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogRead, LogReader, PodName,
-    PodState, SecretName,
+    ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogReader, PodName, PodState,
+    SecretName,
 };
 
 const BOX_CONTAINER: &str = "box";
@@ -72,11 +72,10 @@ impl KubeCluster {
         Ok(newest_pod(list.items).as_ref().and_then(pod_state))
     }
 
-    async fn open_log(&self, pod: &PodName, read: LogRead) -> Result<LogReader, ClusterError> {
+    async fn open_log(&self, pod: &PodName, follow: bool) -> Result<LogReader, ClusterError> {
         let params = LogParams {
             container: Some(BOX_CONTAINER.to_owned()),
-            follow: read.follow,
-            tail_lines: read.tail_lines,
+            follow,
             ..LogParams::default()
         };
         match self.pods.log_stream(pod.as_str(), &params).await {
@@ -208,9 +207,9 @@ impl Cluster for KubeCluster {
     fn read_log<'a>(
         &'a self,
         pod: &'a PodName,
-        read: LogRead,
+        follow: bool,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>> {
-        self.open_log(pod, read).boxed()
+        self.open_log(pod, follow).boxed()
     }
 
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {

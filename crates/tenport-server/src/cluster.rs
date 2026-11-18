@@ -8,8 +8,8 @@ use k8s_openapi::api::batch::v1::Job;
 pub use fake::FakeCluster;
 pub use kube_api::KubeCluster;
 pub use model::{
-    ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogRead, LogReader, PodName,
-    PodState, SecretName,
+    ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogReader, PodName, PodState,
+    SecretName,
 };
 
 pub const TENPORT_JOBS: &str = "app.kubernetes.io/managed-by=tenport";
@@ -28,7 +28,7 @@ pub trait Cluster: Send + Sync {
     fn read_log<'a>(
         &'a self,
         pod: &'a PodName,
-        read: LogRead,
+        follow: bool,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>>;
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>>;
     fn write_secret_key<'a>(

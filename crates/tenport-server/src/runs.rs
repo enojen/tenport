@@ -19,9 +19,7 @@ use crate::run_credentials::{RUN_PLACEHOLDER_KEY, RunCredentials, run_placeholde
 use crate::task_archives::TaskArchiveBucket;
 use futures::future::try_join_all;
 
-use crate::cluster::{
-    Cluster, ClusterError, CreatedJob, JobName, JobState, LogRead, LogReader, PodState,
-};
+use crate::cluster::{Cluster, ClusterError, CreatedJob, JobName, JobState, LogReader, PodState};
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
 use crate::name::Name;
@@ -202,11 +200,7 @@ impl Runs {
     ) -> Result<LogReader, RunsError> {
         let run = find_run_for_member(db, user, name).await?;
         let pod = self.find_started_pod(&run).await?;
-        let read = LogRead {
-            follow,
-            tail_lines: None,
-        };
-        match self.cluster.read_log(&pod.name, read).await {
+        match self.cluster.read_log(&pod.name, follow).await {
             Err(ClusterError::NoPod(_)) => Err(RunsError::JobGone { run: run.name }),
             other => Ok(other?),
         }

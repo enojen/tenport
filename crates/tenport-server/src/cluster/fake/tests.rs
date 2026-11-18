@@ -64,10 +64,7 @@ async fn the_log_of_a_pod_is_read() {
     cluster.set_phase(&name, JobPhase::Succeeded);
     assert_eq!(cluster.find_pod(&name).await.unwrap(), Some(pod.clone()));
     let mut text = String::new();
-    let mut reader = cluster
-        .read_log(&pod.name, LogRead::default())
-        .await
-        .unwrap();
+    let mut reader = cluster.read_log(&pod.name, false).await.unwrap();
     reader.read_to_string(&mut text).await.unwrap();
     assert_eq!(text, "one\ntwo\n");
     assert_eq!(

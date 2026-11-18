@@ -92,12 +92,6 @@ pub struct PodState {
     pub pod_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct LogRead {
-    pub follow: bool,
-    pub tail_lines: Option<i64>,
-}
-
 pub type LogReader = Pin<Box<dyn AsyncBufRead + Send>>;
 
 #[derive(Debug, thiserror::Error)]
