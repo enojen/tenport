@@ -25,6 +25,10 @@ impl TaskId {
             Err(TaskIdError)
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 parsed_text!(TaskId, TaskIdError);

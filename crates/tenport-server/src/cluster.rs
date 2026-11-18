@@ -12,14 +12,18 @@ pub use model::{
     SecretName,
 };
 
-pub const TENPORT_JOBS: &str = "app.kubernetes.io/managed-by=tenport";
+pub const MANAGED_BY_LABEL: &str = "app.kubernetes.io/managed-by";
+pub const MANAGER: &str = "tenport";
 pub const PROJECT_ID_LABEL: &str = "project-id";
+pub const TASK_LABEL: &str = "task";
+pub const TENPORT_JOB_LABELS: &[(&str, &str)] = &[(MANAGED_BY_LABEL, MANAGER)];
+pub const BOX_CONTAINER: &str = "box";
 
 pub trait Cluster: Send + Sync {
     fn create_job(&self, job: Job) -> BoxFuture<'_, Result<CreatedJob, ClusterError>>;
     fn list_jobs<'a>(
         &'a self,
-        selector: &'a str,
+        labels: &'a [(&'a str, &'a str)],
     ) -> BoxFuture<'a, Result<Vec<JobState>, ClusterError>>;
     fn find_pod<'a>(
         &'a self,

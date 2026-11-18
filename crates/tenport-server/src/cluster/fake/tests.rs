@@ -2,6 +2,7 @@ use futures::AsyncReadExt;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 
 use super::*;
+use crate::cluster::TASK_LABEL;
 
 fn job(name: &str, task: &str) -> Job {
     Job {
@@ -25,7 +26,10 @@ async fn a_created_job_is_listed_by_its_labels() {
     let cluster = FakeCluster::default();
     cluster.create_job(job("a", "TEN-1")).await.unwrap();
     cluster.create_job(job("b", "TEN-2")).await.unwrap();
-    let listed = cluster.list_jobs("app=tenport,task=TEN-2").await.unwrap();
+    let listed = cluster
+        .list_jobs(&[("app", "tenport"), (TASK_LABEL, "TEN-2")])
+        .await
+        .unwrap();
     let names: Vec<&str> = listed.iter().map(|state| state.name.as_str()).collect();
     assert_eq!(names, ["b"]);
     assert_eq!(listed[0].phase, JobPhase::Running);
@@ -68,7 +72,7 @@ async fn the_log_of_a_pod_is_read() {
     reader.read_to_string(&mut text).await.unwrap();
     assert_eq!(text, "one\ntwo\n");
     assert_eq!(
-        cluster.list_jobs("task=TEN-1").await.unwrap()[0].phase,
+        cluster.list_jobs(&[(TASK_LABEL, "TEN-1")]).await.unwrap()[0].phase,
         JobPhase::Succeeded
     );
 }

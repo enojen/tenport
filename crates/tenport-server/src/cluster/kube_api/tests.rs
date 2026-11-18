@@ -7,6 +7,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
 use k8s_openapi::jiff::Timestamp;
 
 use super::*;
+use crate::cluster::{PROJECT_ID_LABEL, TASK_LABEL};
 
 fn meta(name: &str, second: i64) -> ObjectMeta {
     ObjectMeta {
@@ -205,4 +206,10 @@ fn an_ended_box_gives_its_exit_code_and_an_evicted_pod_its_reason() {
     assert_eq!(state.exit_code, Some(137));
     assert_eq!(state.pod_reason.as_deref(), Some("Evicted"));
     assert_eq!(state.reason.as_deref(), Some("Error"));
+}
+
+#[test]
+fn label_pairs_join_into_one_selector() {
+    let selector = label_selector(&[(PROJECT_ID_LABEL, "abc123"), (TASK_LABEL, "TEN-1")]);
+    assert_eq!(selector, "project-id=abc123,task=TEN-1");
 }

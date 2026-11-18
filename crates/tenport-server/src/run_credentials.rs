@@ -8,7 +8,8 @@ use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 
 use crate::cluster::{
-    Cluster, ClusterError, JobName, JobState, JobUid, PROJECT_ID_LABEL, SecretName, TENPORT_JOBS,
+    Cluster, ClusterError, JobName, JobState, JobUid, PROJECT_ID_LABEL, SecretName,
+    TENPORT_JOB_LABELS,
 };
 use crate::db::Db;
 use crate::github::{GITHUB_HOSTS, GithubApp, GithubError, RepoToken};
@@ -92,7 +93,7 @@ impl RunCredentials {
     }
 
     async fn list_open_jobs(&self) -> Result<Vec<JobState>, ClusterError> {
-        let jobs = self.cluster.list_jobs(TENPORT_JOBS).await?;
+        let jobs = self.cluster.list_jobs(TENPORT_JOB_LABELS).await?;
         Ok(jobs.into_iter().filter(JobState::is_running).collect())
     }
 

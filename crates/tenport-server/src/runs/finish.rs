@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::model::{Finish, FinishedPhase, Run, RunFinished, RunPhase, RunState, RunsEvent};
 use super::{Runs, RunsError, find_job_in, find_run, store};
-use crate::cluster::{ClusterError, JobPhase, JobState, PodName, PodState, TENPORT_JOBS};
+use crate::cluster::{ClusterError, JobPhase, JobState, PodName, PodState, TENPORT_JOB_LABELS};
 use crate::db::Db;
 use crate::events::{self, Actor, Event, EventsError};
 
@@ -31,7 +31,7 @@ impl Runs {
         if runs.is_empty() {
             return Ok(0);
         }
-        let jobs = self.cluster.list_jobs(TENPORT_JOBS).await?;
+        let jobs = self.cluster.list_jobs(TENPORT_JOB_LABELS).await?;
         let mut recorded = 0;
         for run in runs {
             let job = find_job_in(&jobs, &run);

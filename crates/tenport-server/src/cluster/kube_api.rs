@@ -9,20 +9,18 @@ use kube::api::{DeleteParams, ListParams, LogParams, Patch, PatchParams, PostPar
 use kube::{Api, Client};
 use serde_json::{Value, json};
 
-use super::Cluster;
 use super::model::{
     ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogReader, PodName, PodState,
     SecretName,
 };
+use super::{BOX_CONTAINER, Cluster, MANAGER};
 
-const BOX_CONTAINER: &str = "box";
 const CONFLICT: u16 = 409;
 const NOT_FOUND: u16 = 404;
 const PENDING: &str = "Pending";
 const COMPLETE: &str = "Complete";
 const FAILED: &str = "Failed";
 const TRUE: &str = "True";
-const FIELD_MANAGER: &str = "tenport";
 const OPAQUE: &str = "Opaque";
 
 pub struct KubeCluster {
@@ -52,7 +50,7 @@ impl KubeCluster {
         value: &str,
     ) -> Result<(), ClusterError> {
         let params = PostParams {
-            field_manager: Some(FIELD_MANAGER.to_owned()),
+            field_manager: Some(MANAGER.to_owned()),
             ..PostParams::default()
         };
         match self
@@ -70,7 +68,7 @@ impl KubeCluster {
 
     async fn patch_secret(&self, secret: &SecretName, patch: Value) -> Result<(), ClusterError> {
         let params = PatchParams {
-            field_manager: Some(FIELD_MANAGER.to_owned()),
+            field_manager: Some(MANAGER.to_owned()),
             ..PatchParams::default()
         };
         self.secrets
@@ -98,10 +96,10 @@ impl Cluster for KubeCluster {
 
     fn list_jobs<'a>(
         &'a self,
-        selector: &'a str,
+        labels: &'a [(&'a str, &'a str)],
     ) -> BoxFuture<'a, Result<Vec<JobState>, ClusterError>> {
         async move {
-            let params = ListParams::default().labels(selector);
+            let params = ListParams::default().labels(&label_selector(labels));
             let list = self.jobs.list(&params).await.map_err(ClusterError::Kube)?;
             Ok(list.items.iter().filter_map(job_state).collect())
         }
@@ -206,7 +204,7 @@ impl Cluster for KubeCluster {
     ) -> BoxFuture<'a, Result<(), ClusterError>> {
         async move {
             let params = PostParams {
-                field_manager: Some(FIELD_MANAGER.to_owned()),
+                field_manager: Some(MANAGER.to_owned()),
                 ..PostParams::default()
             };
             let mut new = new_secret(secret, key, value);
@@ -219,6 +217,14 @@ impl Cluster for KubeCluster {
         }
         .boxed()
     }
+}
+
+fn label_selector(labels: &[(&str, &str)]) -> String {
+    labels
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn created_job(name: JobName, uid: Option<String>) -> Result<CreatedJob, ClusterError> {

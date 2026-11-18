@@ -126,17 +126,16 @@ impl Cluster for FakeCluster {
 
     fn list_jobs<'a>(
         &'a self,
-        selector: &'a str,
+        labels: &'a [(&'a str, &'a str)],
     ) -> BoxFuture<'a, Result<Vec<JobState>, ClusterError>> {
-        let wanted = parse_selector(selector);
         let states = self
             .lock()
             .iter()
             .map(|(name, fake)| job_state(name, fake))
             .filter(|state| {
-                wanted
+                labels
                     .iter()
-                    .all(|(key, value)| state.labels.get(*key) == Some(&(*value).to_owned()))
+                    .all(|(key, value)| state.labels.get(*key).map(String::as_str) == Some(*value))
             })
             .collect();
         ready(Ok(states)).boxed()
@@ -246,13 +245,6 @@ fn job_state(name: &JobName, fake: &FakeJob) -> JobState {
         phase: fake.phase,
         failed_reason: fake.failed_reason.clone(),
     }
-}
-
-fn parse_selector(selector: &str) -> Vec<(&str, &str)> {
-    selector
-        .split(',')
-        .filter_map(|pair| pair.split_once('='))
-        .collect()
 }
 
 #[cfg(test)]

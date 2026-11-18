@@ -19,7 +19,10 @@ use crate::run_credentials::{RUN_PLACEHOLDER_KEY, RunCredentials, run_placeholde
 use crate::task_archives::TaskArchiveBucket;
 use futures::future::try_join_all;
 
-use crate::cluster::{Cluster, ClusterError, CreatedJob, JobName, JobState, LogReader, PodState};
+use crate::cluster::{
+    Cluster, ClusterError, CreatedJob, JobName, JobState, LogReader, PROJECT_ID_LABEL, PodState,
+    TASK_LABEL,
+};
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
 use crate::name::Name;
@@ -247,8 +250,11 @@ impl Runs {
         project: &ProjectId,
         task: &TaskId,
     ) -> Result<Vec<JobState>, RunsError> {
-        let selector = format!("project-id={project},task={task}");
-        Ok(self.cluster.list_jobs(&selector).await?)
+        let labels = [
+            (PROJECT_ID_LABEL, project.as_str()),
+            (TASK_LABEL, task.as_str()),
+        ];
+        Ok(self.cluster.list_jobs(&labels).await?)
     }
 
     pub async fn lock_idle_task(
