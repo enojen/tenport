@@ -48,32 +48,45 @@ pub struct AddedUser {
 }
 
 pub async fn add_user(db: &Db, actor: Actor, new: NewUser) -> Result<AddedUser, AccountsError> {
+    let NewUser {
+        organization_name,
+        name,
+        email,
+        github,
+        role,
+        token_name,
+    } = new;
     let mut events = Vec::new();
-    let organization = match find_organization_id(db, &new.organization_name).await? {
+    let organization = match find_organization_id(db, &organization_name).await? {
         Some(id) => id,
-        None => add_organization(&mut events, &new.organization_name),
+        None => add_organization(&mut events, organization_name),
     };
     let user = UserId::random();
     let token = Token::random();
-    events.push(user_added(&user, &new));
+    events.push(Event::Accounts(AccountsEvent::UserAdded(UserAdded {
+        id: user.clone(),
+        name,
+        email,
+        github: github.clone(),
+    })));
     events.push(Event::Accounts(AccountsEvent::MemberAdded(MemberAdded {
         organization: organization.clone(),
         user: user.clone(),
-        role: new.role,
+        role,
     })));
     events.push(Event::Accounts(AccountsEvent::TokenAdded(TokenAdded {
         id: TokenId::random(),
         user: user.clone(),
-        name: new.token_name,
+        name: token_name,
         hash: token.hash(),
     })));
     events::append_all(db, actor, events)
         .await
-        .map_err(|error| add_user_error(error, &new.github))?;
+        .map_err(|error| add_user_error(error, github))?;
     Ok(AddedUser {
         user,
         organization,
-        role: new.role,
+        role,
         token,
     })
 }
@@ -121,31 +134,20 @@ async fn find_organization_id(
     Ok(store::find_organization_id_by_name(&mut conn, name).await?)
 }
 
-fn add_organization(events: &mut Vec<Event>, name: &Name) -> OrganizationId {
+fn add_organization(events: &mut Vec<Event>, name: Name) -> OrganizationId {
     let id = OrganizationId::random();
     events.push(Event::Accounts(AccountsEvent::OrganizationAdded(
         OrganizationAdded {
             id: id.clone(),
-            name: name.clone(),
+            name,
         },
     )));
     id
 }
 
-fn user_added(id: &UserId, user: &NewUser) -> Event {
-    Event::Accounts(AccountsEvent::UserAdded(UserAdded {
-        id: id.clone(),
-        name: user.name.clone(),
-        email: user.email.clone(),
-        github: user.github.clone(),
-    }))
-}
-
-fn add_user_error(error: EventsError, github: &GithubLogin) -> AccountsError {
+fn add_user_error(error: EventsError, github: GithubLogin) -> AccountsError {
     if error.violates_unique(UNIQUE_GITHUB) {
-        AccountsError::UserExists {
-            github: github.clone(),
-        }
+        AccountsError::UserExists { github }
     } else {
         AccountsError::Events(error)
     }
