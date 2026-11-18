@@ -3,6 +3,10 @@
 Tenport: the backend of Tenyard, in Rust. `README.md` says what is here, `docs/capabilities.md`
 what it must do.
 
+The rules below are a guide, not law. When the code and a rule disagree, or a rule looks wrong,
+ask the user before you change either one. Explain a change by what it does in the code, not by
+the rule that asks for it.
+
 ## Layout
 
 - One Cargo workspace. Every crate is in `crates/`, flat, and its folder name is its crate name.
