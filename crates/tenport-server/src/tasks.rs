@@ -96,11 +96,11 @@ pub(crate) async fn apply(
 ) -> Result<(), ApplyError> {
     match event {
         TasksEvent::TaskStarted(started) => refuse_unless(
-            store::open_task(conn, started, stamp).await?,
+            store::insert_task(conn, started, stamp).await?,
             "the task is open already",
         ),
         TasksEvent::TaskClosed(closed) => refuse_unless(
-            store::close_task(conn, closed, stamp).await?,
+            store::update_task_closed(conn, closed, stamp).await?,
             "the task is not open",
         ),
         TasksEvent::TaskDeleted(deleted) => Ok(store::delete_task(conn, deleted).await?),
