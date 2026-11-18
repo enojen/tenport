@@ -18,13 +18,13 @@ const COMMANDS_EXTENSION: &str = "x-tenbox-commands";
         license(name = "FSL-1.1-ALv2")
     ),
     components(responses(Unauthorized, NotMember, TooManyRequests, Unavailable)),
-    modifiers(&BearerToken)
+    modifiers(&SecuritySchemes)
 )]
 pub struct ApiDoc;
 
-struct BearerToken;
+struct SecuritySchemes;
 
-impl Modify for BearerToken {
+impl Modify for SecuritySchemes {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let components = openapi.components.get_or_insert_with(Default::default);
         components.add_security_scheme(
