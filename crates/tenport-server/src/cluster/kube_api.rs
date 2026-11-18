@@ -87,14 +87,14 @@ impl KubeCluster {
         }
     }
 
-    async fn delete(&self, job: &JobName) -> Result<bool, ClusterError> {
+    async fn delete(&self, job: &JobName) -> Result<(), ClusterError> {
         match self
             .jobs
             .delete(job.as_str(), &DeleteParams::background())
             .await
         {
-            Ok(_) => Ok(true),
-            Err(error) if status_code(&error) == Some(NOT_FOUND) => Ok(false),
+            Ok(_) => Ok(()),
+            Err(error) if status_code(&error) == Some(NOT_FOUND) => Ok(()),
             Err(error) => Err(ClusterError::Kube(error)),
         }
     }
@@ -212,7 +212,7 @@ impl Cluster for KubeCluster {
         self.open_log(pod, follow).boxed()
     }
 
-    fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {
+    fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<(), ClusterError>> {
         self.delete(job).boxed()
     }
 

@@ -30,7 +30,7 @@ pub trait Cluster: Send + Sync {
         pod: &'a PodName,
         follow: bool,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>>;
-    fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>>;
+    fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<(), ClusterError>>;
     fn write_secret_key<'a>(
         &'a self,
         secret: &'a SecretName,

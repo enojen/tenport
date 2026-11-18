@@ -174,8 +174,8 @@ impl FakeCluster {
         Ok(Box::pin(written))
     }
 
-    fn delete(&self, job: &JobName) -> bool {
-        self.lock().remove(job).is_some()
+    fn delete(&self, job: &JobName) {
+        self.lock().remove(job);
     }
 }
 
@@ -210,8 +210,9 @@ impl Cluster for FakeCluster {
         ready(self.open_log(pod, follow)).boxed()
     }
 
-    fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<bool, ClusterError>> {
-        ready(Ok(self.delete(job))).boxed()
+    fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<(), ClusterError>> {
+        self.delete(job);
+        ready(Ok(())).boxed()
     }
 
     fn write_secret_key<'a>(
