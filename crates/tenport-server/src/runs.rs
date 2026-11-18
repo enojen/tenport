@@ -14,7 +14,7 @@ use time::OffsetDateTime;
 use tokio::sync::Mutex;
 
 use crate::accounts::{Email, UserId};
-use crate::task_archives::TaskArchiveBucket;
+use crate::task_archives::{TaskArchiveBucket, TaskArchiveState, TaskArchivesError};
 use futures::future::try_join_all;
 use futures::try_join;
 
@@ -25,7 +25,7 @@ use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
 use crate::name::Name;
 use crate::projects::{self, Project, ProjectId, ProjectsError};
-use crate::tasks::TaskId;
+use crate::tasks::{TaskDeleted, TaskId, TasksEvent};
 
 pub use command::{Command, CommandError, CommandName, command_rules};
 pub use model::{
@@ -54,6 +54,8 @@ pub enum RunsError {
     Busy { task: TaskId, jobs: Vec<String> },
     #[error(transparent)]
     Template(#[from] TemplateError),
+    #[error(transparent)]
+    TaskArchives(#[from] TaskArchivesError),
     #[error(transparent)]
     Cluster(#[from] ClusterError),
     #[error(transparent)]
@@ -199,6 +201,26 @@ impl Runs {
             Err(ClusterError::NoPod(_)) => Err(RunsError::JobGone { run: run.name }),
             other => Ok(other?),
         }
+    }
+
+    pub async fn delete_task(
+        &self,
+        db: &Db,
+        user: &UserId,
+        project: &ProjectId,
+        task: &TaskId,
+    ) -> Result<TaskArchiveState, RunsError> {
+        let project = projects::require_member(db, user, project).await?;
+        let _no_start_meanwhile = self.start_lock.lock().await;
+        self.require_idle(&project, task).await?;
+        let archive = self.task_archives.delete(&project.id, task).await?;
+        let deleted = TaskDeleted {
+            project: project.id,
+            task: task.clone(),
+        };
+        let event = Event::Tasks(TasksEvent::TaskDeleted(deleted));
+        events::append(db, Actor::User(user.clone()), event).await?;
+        Ok(archive)
     }
 
     pub async fn stop(&self, db: &Db, user: &UserId, name: &RunName) -> Result<(), RunsError> {

@@ -118,8 +118,7 @@ async fn the_job_of_a_run_gets_a_get_and_a_put_url_for_the_task_archive() {
     let job = &server.cluster.jobs()[0];
     let get = box_env(job, "TENBOX_ARCHIVE_GET");
     let put = box_env(job, "TENBOX_ARCHIVE_PUT");
-    let object =
-        format!("https://objects.example.test/tenbox-test/tasks/{project}/TEN-301.tar.zst?");
+    let object = format!("{}/tasks/{project}/TEN-301.tar.zst?", server.bucket.url);
     assert!(get.starts_with(&object), "{get}");
     assert!(put.starts_with(&object), "{put}");
     assert!(get.contains("X-Amz-Expires=86400"), "{get}");

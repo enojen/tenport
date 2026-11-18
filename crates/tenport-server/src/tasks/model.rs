@@ -36,6 +36,8 @@ pub enum TasksEvent {
     TaskStarted(TaskStarted),
     #[serde(rename = "task.closed")]
     TaskClosed(TaskClosed),
+    #[serde(rename = "task.deleted")]
+    TaskDeleted(TaskDeleted),
 }
 
 impl TasksEvent {
@@ -43,6 +45,7 @@ impl TasksEvent {
         match self {
             Self::TaskStarted(_) => "task.started",
             Self::TaskClosed(_) => "task.closed",
+            Self::TaskDeleted(_) => "task.deleted",
         }
     }
 
@@ -54,6 +57,7 @@ impl TasksEvent {
         match self {
             Self::TaskStarted(started) => &started.project,
             Self::TaskClosed(closed) => &closed.project,
+            Self::TaskDeleted(deleted) => &deleted.project,
         }
     }
 
@@ -61,6 +65,7 @@ impl TasksEvent {
         match self {
             Self::TaskStarted(started) => &started.task,
             Self::TaskClosed(closed) => &closed.task,
+            Self::TaskDeleted(deleted) => &deleted.task,
         }
     }
 }
@@ -81,6 +86,14 @@ pub struct TaskStarted {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct TaskClosed {
+    #[schema(value_type = String)]
+    pub project: ProjectId,
+    #[schema(value_type = String, example = "TEN-301")]
+    pub task: TaskId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct TaskDeleted {
     #[schema(value_type = String)]
     pub project: ProjectId,
     #[schema(value_type = String, example = "TEN-301")]
