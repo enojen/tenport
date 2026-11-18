@@ -45,94 +45,6 @@ impl KubeCluster {
         }
     }
 
-    async fn create(&self, job: Job) -> Result<CreatedJob, ClusterError> {
-        let name = JobName::new(job.metadata.name.clone().ok_or(ClusterError::NoName)?);
-        match self.jobs.create(&PostParams::default(), &job).await {
-            Ok(created) => match created.metadata.uid {
-                Some(uid) => Ok(CreatedJob {
-                    name,
-                    uid: JobUid::new(uid),
-                }),
-                None => Err(ClusterError::NoUid(name)),
-            },
-            Err(error) if status_code(&error) == Some(CONFLICT) => Err(ClusterError::Exists(name)),
-            Err(error) => Err(ClusterError::Kube(error)),
-        }
-    }
-
-    async fn list(&self, selector: &str) -> Result<Vec<JobState>, ClusterError> {
-        let params = ListParams::default().labels(selector);
-        let list = self.jobs.list(&params).await.map_err(ClusterError::Kube)?;
-        Ok(list.items.iter().filter_map(job_state).collect())
-    }
-
-    async fn find(&self, job: &JobName) -> Result<Option<PodState>, ClusterError> {
-        let params = ListParams::default().labels(&format!("job-name={}", job.as_str()));
-        let list = self.pods.list(&params).await.map_err(ClusterError::Kube)?;
-        Ok(newest_pod(list.items).as_ref().and_then(pod_state))
-    }
-
-    async fn open_log(&self, pod: &PodName, follow: bool) -> Result<LogReader, ClusterError> {
-        let params = LogParams {
-            container: Some(BOX_CONTAINER.to_owned()),
-            follow,
-            ..LogParams::default()
-        };
-        match self.pods.log_stream(pod.as_str(), &params).await {
-            Ok(reader) => Ok(Box::pin(reader)),
-            Err(error) if status_code(&error) == Some(NOT_FOUND) => {
-                Err(ClusterError::NoPod(pod.clone()))
-            }
-            Err(error) => Err(ClusterError::Kube(error)),
-        }
-    }
-
-    async fn delete(&self, job: &JobName) -> Result<(), ClusterError> {
-        match self
-            .jobs
-            .delete(job.as_str(), &DeleteParams::background())
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(error) if status_code(&error) == Some(NOT_FOUND) => Ok(()),
-            Err(error) => Err(ClusterError::Kube(error)),
-        }
-    }
-
-    async fn write_key(
-        &self,
-        secret: &SecretName,
-        key: &str,
-        value: &str,
-    ) -> Result<(), ClusterError> {
-        match self.patch_secret(secret, string_data(key, value)).await {
-            Err(ClusterError::Kube(error)) if status_code(&error) == Some(NOT_FOUND) => {
-                self.create_secret(secret, key, value).await
-            }
-            other => other,
-        }
-    }
-
-    async fn create_owned_secret(
-        &self,
-        secret: &SecretName,
-        owner: &CreatedJob,
-        key: &str,
-        value: &str,
-    ) -> Result<(), ClusterError> {
-        let params = PostParams {
-            field_manager: Some(FIELD_MANAGER.to_owned()),
-            ..PostParams::default()
-        };
-        let mut new = new_secret(secret, key, value);
-        new.metadata.owner_references = Some(vec![job_owner(owner)]);
-        self.secrets
-            .create(&params, &new)
-            .await
-            .map(|_| ())
-            .map_err(ClusterError::Kube)
-    }
-
     async fn create_secret(
         &self,
         secret: &SecretName,
@@ -156,22 +68,6 @@ impl KubeCluster {
         }
     }
 
-    async fn delete_key(&self, secret: &SecretName, key: &str) -> Result<bool, ClusterError> {
-        let found = self
-            .secrets
-            .get_opt(secret.as_str())
-            .await
-            .map_err(ClusterError::Kube)?;
-        let has_key = found
-            .and_then(|secret| secret.data)
-            .is_some_and(|data| data.contains_key(key));
-        if has_key {
-            self.patch_secret(secret, json!({ "data": { key: null } }))
-                .await?;
-        }
-        Ok(has_key)
-    }
-
     async fn patch_secret(&self, secret: &SecretName, patch: Value) -> Result<(), ClusterError> {
         let params = PatchParams {
             field_manager: Some(FIELD_MANAGER.to_owned()),
@@ -187,21 +83,41 @@ impl KubeCluster {
 
 impl Cluster for KubeCluster {
     fn create_job(&self, job: Job) -> BoxFuture<'_, Result<CreatedJob, ClusterError>> {
-        self.create(job).boxed()
+        async move {
+            let name = JobName::new(job.metadata.name.clone().ok_or(ClusterError::NoName)?);
+            match self.jobs.create(&PostParams::default(), &job).await {
+                Ok(created) => created_job(name, created.metadata.uid),
+                Err(error) if status_code(&error) == Some(CONFLICT) => {
+                    Err(ClusterError::Exists(name))
+                }
+                Err(error) => Err(ClusterError::Kube(error)),
+            }
+        }
+        .boxed()
     }
 
     fn list_jobs<'a>(
         &'a self,
         selector: &'a str,
     ) -> BoxFuture<'a, Result<Vec<JobState>, ClusterError>> {
-        self.list(selector).boxed()
+        async move {
+            let params = ListParams::default().labels(selector);
+            let list = self.jobs.list(&params).await.map_err(ClusterError::Kube)?;
+            Ok(list.items.iter().filter_map(job_state).collect())
+        }
+        .boxed()
     }
 
     fn find_pod<'a>(
         &'a self,
         job: &'a JobName,
     ) -> BoxFuture<'a, Result<Option<PodState>, ClusterError>> {
-        self.find(job).boxed()
+        async move {
+            let params = ListParams::default().labels(&format!("job-name={}", job.as_str()));
+            let list = self.pods.list(&params).await.map_err(ClusterError::Kube)?;
+            Ok(newest_pod(list.items).as_ref().and_then(pod_state))
+        }
+        .boxed()
     }
 
     fn read_log<'a>(
@@ -209,11 +125,36 @@ impl Cluster for KubeCluster {
         pod: &'a PodName,
         follow: bool,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>> {
-        self.open_log(pod, follow).boxed()
+        async move {
+            let params = LogParams {
+                container: Some(BOX_CONTAINER.to_owned()),
+                follow,
+                ..LogParams::default()
+            };
+            match self.pods.log_stream(pod.as_str(), &params).await {
+                Ok(reader) => Ok(Box::pin(reader) as LogReader),
+                Err(error) if status_code(&error) == Some(NOT_FOUND) => {
+                    Err(ClusterError::NoPod(pod.clone()))
+                }
+                Err(error) => Err(ClusterError::Kube(error)),
+            }
+        }
+        .boxed()
     }
 
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<(), ClusterError>> {
-        self.delete(job).boxed()
+        async move {
+            match self
+                .jobs
+                .delete(job.as_str(), &DeleteParams::background())
+                .await
+            {
+                Ok(_) => Ok(()),
+                Err(error) if status_code(&error) == Some(NOT_FOUND) => Ok(()),
+                Err(error) => Err(ClusterError::Kube(error)),
+            }
+        }
+        .boxed()
     }
 
     fn write_secret_key<'a>(
@@ -222,7 +163,15 @@ impl Cluster for KubeCluster {
         key: &'a str,
         value: &'a str,
     ) -> BoxFuture<'a, Result<(), ClusterError>> {
-        self.write_key(secret, key, value).boxed()
+        async move {
+            match self.patch_secret(secret, string_data(key, value)).await {
+                Err(ClusterError::Kube(error)) if status_code(&error) == Some(NOT_FOUND) => {
+                    self.create_secret(secret, key, value).await
+                }
+                other => other,
+            }
+        }
+        .boxed()
     }
 
     fn delete_secret_key<'a>(
@@ -230,7 +179,22 @@ impl Cluster for KubeCluster {
         secret: &'a SecretName,
         key: &'a str,
     ) -> BoxFuture<'a, Result<bool, ClusterError>> {
-        self.delete_key(secret, key).boxed()
+        async move {
+            let found = self
+                .secrets
+                .get_opt(secret.as_str())
+                .await
+                .map_err(ClusterError::Kube)?;
+            let has_key = found
+                .and_then(|secret| secret.data)
+                .is_some_and(|data| data.contains_key(key));
+            if has_key {
+                self.patch_secret(secret, json!({ "data": { key: null } }))
+                    .await?;
+            }
+            Ok(has_key)
+        }
+        .boxed()
     }
 
     fn create_job_secret<'a>(
@@ -240,7 +204,30 @@ impl Cluster for KubeCluster {
         key: &'a str,
         value: &'a str,
     ) -> BoxFuture<'a, Result<(), ClusterError>> {
-        self.create_owned_secret(secret, owner, key, value).boxed()
+        async move {
+            let params = PostParams {
+                field_manager: Some(FIELD_MANAGER.to_owned()),
+                ..PostParams::default()
+            };
+            let mut new = new_secret(secret, key, value);
+            new.metadata.owner_references = Some(vec![job_owner(owner)]);
+            self.secrets
+                .create(&params, &new)
+                .await
+                .map(|_| ())
+                .map_err(ClusterError::Kube)
+        }
+        .boxed()
+    }
+}
+
+fn created_job(name: JobName, uid: Option<String>) -> Result<CreatedJob, ClusterError> {
+    match uid {
+        Some(uid) => Ok(CreatedJob {
+            name,
+            uid: JobUid::new(uid),
+        }),
+        None => Err(ClusterError::NoUid(name)),
     }
 }
 
