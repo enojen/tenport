@@ -50,6 +50,12 @@ impl From<JobName> for RunName {
     }
 }
 
+impl From<&RunName> for JobName {
+    fn from(run: &RunName) -> Self {
+        JobName::new(run.as_str())
+    }
+}
+
 dns_label!(
     ClassName,
     ClassNameError,

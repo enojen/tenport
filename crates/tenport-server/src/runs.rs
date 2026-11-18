@@ -20,7 +20,8 @@ use crate::task_archives::TaskArchiveBucket;
 use futures::future::try_join_all;
 
 use crate::cluster::{
-    Cluster, ClusterError, CreatedJob, JobName, JobState, LogRead, LogReader, PodState,
+    Cluster, ClusterError, CreatedJob, JobName, JobState, LogReader, PROJECT_ID_LABEL, PodState,
+    TASK_LABEL,
 };
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
@@ -202,11 +203,7 @@ impl Runs {
     ) -> Result<LogReader, RunsError> {
         let run = find_run_for_member(db, user, name).await?;
         let pod = self.find_started_pod(&run).await?;
-        let read = LogRead {
-            follow,
-            tail_lines: None,
-        };
-        match self.cluster.read_log(&pod.name, read).await {
+        match self.cluster.read_log(&pod.name, follow).await {
             Err(ClusterError::NoPod(_)) => Err(RunsError::JobGone { run: run.name }),
             other => Ok(other?),
         }
@@ -219,9 +216,7 @@ impl Runs {
         if !running {
             self.run_state(db, run.clone(), job.as_ref()).await?;
         }
-        self.cluster
-            .delete_job(&JobName::new(run.name.as_str()))
-            .await?;
+        self.cluster.delete_job(&JobName::from(&run.name)).await?;
         if running && run.finished.is_none() {
             self.finish(db, run, Finish::stopped()).await?;
         }
@@ -238,14 +233,14 @@ impl Runs {
             Some(pod) if pod.started => Ok(pod),
             pod => Err(RunsError::NotStarted {
                 run: run.name.clone(),
-                reason: pod.and_then(|pod| pod.reason),
+                reason: pod.and_then(|pod| pod.box_reason),
             }),
         }
     }
 
     async fn find_job(&self, run: &Run) -> Result<Option<JobState>, RunsError> {
-        let jobs = self.list_jobs_of_task(&run.project, &run.task).await?;
-        Ok(find_job_in(&jobs, run).cloned())
+        let job = JobName::from(&run.name);
+        Ok(self.cluster.find_job(&job).await?)
     }
 
     async fn list_jobs_of_task(
@@ -253,8 +248,11 @@ impl Runs {
         project: &ProjectId,
         task: &TaskId,
     ) -> Result<Vec<JobState>, RunsError> {
-        let selector = format!("project-id={project},task={task}");
-        Ok(self.cluster.list_jobs(&selector).await?)
+        let labels = [
+            (PROJECT_ID_LABEL, project.as_str()),
+            (TASK_LABEL, task.as_str()),
+        ];
+        Ok(self.cluster.list_jobs(&labels).await?)
     }
 
     pub async fn lock_idle_task(

@@ -131,7 +131,7 @@ async fn a_user_opens_five_followed_logs_at_most() {
     let pod = PodState {
         name: PodName::new(format!("{name}-abcde")),
         started: true,
-        reason: None,
+        box_reason: None,
         exit_code: None,
         pod_reason: None,
     };

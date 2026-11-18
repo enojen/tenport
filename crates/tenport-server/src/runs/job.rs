@@ -11,6 +11,7 @@ use time::OffsetDateTime;
 
 use super::NewRun;
 use super::model::{ClassName, ServiceName};
+use crate::cluster::{BOX_CONTAINER, MANAGED_BY_LABEL, MANAGER};
 use crate::projects::Project;
 use crate::task_archives::TaskArchiveUrls;
 use crate::tasks::TaskId;
@@ -21,14 +22,11 @@ const JOB_FILE: &str = "job.yaml";
 const CLASSES_FILE: &str = "classes.yaml";
 const SERVICE_EXTENSION: &str = "yaml";
 const APP_LABEL: &str = "app";
-const MANAGED_BY_LABEL: &str = "app.kubernetes.io/managed-by";
-const MANAGER: &str = "tenport";
 const LABEL_POINTERS: [&str; 2] = ["/metadata/labels", "/spec/template/metadata/labels"];
 const POD_SPEC_POINTER: &str = "/spec/template/spec";
 const INIT_CONTAINERS: &str = "initContainers";
 const VOLUMES: &str = "volumes";
 const NAME_KEY: &str = "name";
-const BOX_CONTAINER: &str = "box";
 
 #[derive(Debug, Clone)]
 pub struct RunTemplate {
