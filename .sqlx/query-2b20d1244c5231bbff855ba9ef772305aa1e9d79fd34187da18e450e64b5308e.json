@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "select memberships.role as \"role: Role\"\n           from projects join memberships on memberships.organization_id = projects.organization_id\n           where projects.id = ? and memberships.user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "role: Role",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "memberships",
+            "name": "role"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2b20d1244c5231bbff855ba9ef772305aa1e9d79fd34187da18e450e64b5308e"
+}

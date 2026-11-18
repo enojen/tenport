@@ -188,12 +188,15 @@ async fn require_project_admin(
     user: &UserId,
     project: &ProjectId,
 ) -> Result<(), ProjectsError> {
-    let found = require_member(db, user, project).await?;
-    match require_admin(db, user, &found.organization).await {
-        Err(ProjectsError::NotAdmin { .. }) => Err(ProjectsError::NotProjectAdmin {
+    let mut conn = db.acquire().await?;
+    match store::find_role_of_user_in_project(&mut conn, project, user).await? {
+        Some(Role::Admin) => Ok(()),
+        Some(Role::Member) => Err(ProjectsError::NotProjectAdmin {
             project: project.clone(),
         }),
-        other => other,
+        None => Err(ProjectsError::NotMember {
+            project: project.clone(),
+        }),
     }
 }
 

@@ -147,15 +147,27 @@ async fn a_member_reads_the_names_but_is_forbidden_to_write() {
 }
 
 #[tokio::test]
-async fn a_user_of_another_organization_is_forbidden_to_list() {
+async fn an_admin_of_another_organization_is_forbidden_to_list_or_write() {
     let server = TestServer::start().await;
     let admin = server.register("Wegobi", "enojen", Role::Admin).await;
     let stranger = server.register("Other", "veli", Role::Admin).await;
     let project = add_project(&server, &admin).await;
 
-    let response = list_secrets(&server, &stranger, &project).await;
+    let listed = list_secrets(&server, &stranger, &project).await;
+    let written = put_secret(
+        &server,
+        &stranger,
+        &project,
+        "ntfy_url",
+        json!({ "value": "https://ntfy.sh/x" }),
+    )
+    .await;
+    let deleted = delete_secret(&server, &stranger, &project, "ntfy_url").await;
 
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(listed.status(), StatusCode::FORBIDDEN);
+    assert_eq!(written.status(), StatusCode::FORBIDDEN);
+    assert_eq!(deleted.status(), StatusCode::FORBIDDEN);
+    assert_eq!(project_secret(&server, &project), None);
 }
 
 #[tokio::test]

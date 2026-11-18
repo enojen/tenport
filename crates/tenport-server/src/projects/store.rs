@@ -1,7 +1,7 @@
 use sqlx::SqliteConnection;
 
 use super::model::{Project, ProjectAdded, ProjectId, ProjectSecret, SecretChanged, SecretState};
-use crate::accounts::UserId;
+use crate::accounts::{Role, UserId};
 use crate::events::Stamp;
 
 pub async fn insert_project(
@@ -72,6 +72,22 @@ pub async fn find_project_for_member(
         Project,
         r#"select projects.id as "id: _", projects.organization_id as "organization: _", projects.name as "name: _",
                   projects.repo as "repo: _"
+           from projects join memberships on memberships.organization_id = projects.organization_id
+           where projects.id = ? and memberships.user_id = ?"#,
+        project,
+        user,
+    )
+    .fetch_optional(conn)
+    .await
+}
+
+pub async fn find_role_of_user_in_project(
+    conn: &mut SqliteConnection,
+    project: &ProjectId,
+    user: &UserId,
+) -> Result<Option<Role>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"select memberships.role as "role: Role"
            from projects join memberships on memberships.organization_id = projects.organization_id
            where projects.id = ? and memberships.user_id = ?"#,
         project,
