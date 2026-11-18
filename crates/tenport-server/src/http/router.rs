@@ -13,7 +13,7 @@ use super::error::HttpError;
 use super::extract::Json;
 use super::limits::limit_requests;
 use super::openapi::{ApiDoc, document};
-use super::{accounts, events, health, projects, runs};
+use super::{accounts, events, health, projects, runs, tasks};
 
 pub fn router(state: AppState) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
@@ -26,6 +26,7 @@ pub fn router(state: AppState) -> Router {
         .routes(routes!(runs::start_run, runs::list_runs))
         .routes(routes!(runs::find_run, runs::stop_run))
         .routes(routes!(runs::read_log))
+        .routes(routes!(tasks::delete_task))
         .split_for_parts();
     router
         .route(

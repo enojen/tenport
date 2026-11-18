@@ -1,6 +1,6 @@
 use sqlx::SqliteConnection;
 
-use super::model::{TaskClosed, TaskStarted};
+use super::model::{TaskClosed, TaskDeleted, TaskStarted};
 use crate::events::Stamp;
 
 pub async fn open_task(
@@ -41,6 +41,20 @@ pub async fn close_task(
     .execute(conn)
     .await?;
     Ok(done.rows_affected() == 1)
+}
+
+pub async fn delete_task(
+    conn: &mut SqliteConnection,
+    deleted: &TaskDeleted,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "delete from tasks where project_id = ? and id = ?",
+        deleted.project,
+        deleted.task,
+    )
+    .execute(conn)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]

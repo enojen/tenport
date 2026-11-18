@@ -69,6 +69,7 @@ pub async fn record_events(
 fn record_error(error: TasksError) -> HttpError {
     match error {
         TasksError::Projects(error) => error.into(),
+        TasksError::NotReported { .. } => HttpError::BadRequest(error.to_string()),
         TasksError::Events(EventsError::Conflict { .. } | EventsError::Refused { .. }) => {
             HttpError::Conflict(error.to_string())
         }

@@ -337,7 +337,13 @@ The steps, in order:
      does not serve without them. Each Job gets a GET and a PUT link to
      `tasks/<project id>/<task>.tar.zst`, good for 24 hours, the same object and the same time
      as the CLI's; a Job ends after 8 hours at most.
-   - Deleting a task: `DELETE /tasks/{task}?project=<id>`, with the event `task.deleted`.
+   - Deleting a task: `DELETE /tasks/{task}?project=<id>`, with the event `task.deleted`. A
+     member of the project's organization may delete, as with `machine rm`. It answers 409
+     `machine-busy` while a Job of the task runs, and deletes nothing. Else it deletes the task
+     archive and the task's row, and answers `archive`: `deleted`, or `missing` when the bucket
+     had none, so a second delete is safe. Only Tenport writes `task.deleted`: `POST /events`
+     refuses it with 400. Tenport sends the HEAD and the DELETE to the bucket itself, with
+     the Mozilla roots built in, as its image has no CA files.
    - Tenport's Jobs send their placeholders to an injector of their own, which asks Tenport;
      the injector of the tenbox server stays as it is until step 11.
 5. The runs: `run.finished`, so `GET /runs?project=<id>&task=<id>` and `GET /runs/{name}` keep

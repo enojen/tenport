@@ -68,6 +68,26 @@
         ],
         "type": "object"
       },
+      "DeletedTask": {
+        "properties": {
+          "archive": {
+            "$ref": "#/components/schemas/TaskArchiveState"
+          },
+          "project": {
+            "type": "string"
+          },
+          "task": {
+            "example": "TEN-301",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "task",
+          "archive"
+        ],
+        "type": "object"
+      },
       "Health": {
         "properties": {
           "ok": {
@@ -507,7 +527,30 @@
         ],
         "type": "object"
       },
+      "TaskArchiveState": {
+        "enum": [
+          "deleted",
+          "missing"
+        ],
+        "type": "string"
+      },
       "TaskClosed": {
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "task": {
+            "example": "TEN-301",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project",
+          "task"
+        ],
+        "type": "object"
+      },
+      "TaskDeleted": {
         "properties": {
           "project": {
             "type": "string"
@@ -584,6 +627,27 @@
                   "type": {
                     "enum": [
                       "task.closed"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TaskDeleted"
+              },
+              {
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "task.deleted"
                     ],
                     "type": "string"
                   }
@@ -1393,6 +1457,79 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/tasks/{task}": {
+      "delete": {
+        "operationId": "delete_task",
+        "parameters": [
+          {
+            "description": "The task id, such as TEN-301",
+            "in": "path",
+            "name": "task",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedTask"
+                }
+              }
+            },
+            "description": "The task is deleted. `archive` is `deleted`, or `missing` when the bucket had no task archive, so a second delete is safe"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not a task id or a project id"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/NotMember"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "A Job of the task still runs (code machine-busy); nothing is deleted"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"

@@ -1,4 +1,5 @@
 mod accounts;
+mod bucket;
 mod commands;
 mod events;
 mod health;
@@ -8,3 +9,4 @@ mod projects;
 mod runs;
 mod secrets;
 mod server;
+mod tasks;

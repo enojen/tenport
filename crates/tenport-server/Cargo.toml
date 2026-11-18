@@ -20,6 +20,8 @@ hex.workspace = true
 k8s-openapi.workspace = true
 kube.workspace = true
 rand.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
 rusty-s3.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -37,7 +39,7 @@ url.workspace = true
 utoipa.workspace = true
 utoipa-axum.workspace = true
 uuid.workspace = true
+webpki-roots.workspace = true
 
 [dev-dependencies]
-reqwest.workspace = true
 tempfile.workspace = true

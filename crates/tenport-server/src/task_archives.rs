@@ -1,10 +1,14 @@
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
+use reqwest::{Client, Method, StatusCode};
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
+use serde::Serialize;
 use url::Url;
+use utoipa::ToSchema;
 
 use crate::config::TaskArchiveBucketConfig;
 use crate::projects::ProjectId;
@@ -14,6 +18,8 @@ use crate::tasks::TaskId;
 mod tests;
 
 const URL_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
+const REQUEST_URL_LIFETIME: Duration = Duration::from_secs(60);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
 pub enum TaskArchivesError {
@@ -23,11 +29,33 @@ pub enum TaskArchivesError {
     Empty { path: PathBuf },
     #[error("the bucket {url} is not an http(s) URL with the bucket name as its path: {detail}")]
     BadUrl { url: String, detail: String },
+    #[error("cannot make the HTTP client of the bucket: {0}")]
+    Client(String),
+    #[error("the bucket did not answer {method} {key}: {source}")]
+    Request {
+        method: Method,
+        key: String,
+        source: reqwest::Error,
+    },
+    #[error("the bucket answered {method} {key} with {status}")]
+    Answer {
+        method: Method,
+        key: String,
+        status: StatusCode,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskArchiveState {
+    Deleted,
+    Missing,
 }
 
 pub struct TaskArchiveBucket {
     bucket: Bucket,
     credentials: Credentials,
+    client: Client,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +74,7 @@ impl TaskArchiveBucket {
         Ok(Self {
             bucket: bucket(url, region)?,
             credentials: Credentials::new(key, secret),
+            client: http_client()?,
         })
     }
 
@@ -76,6 +105,56 @@ impl TaskArchiveBucket {
     }
 }
 
+impl TaskArchiveBucket {
+    pub async fn delete(
+        &self,
+        project: &ProjectId,
+        task: &TaskId,
+    ) -> Result<TaskArchiveState, TaskArchivesError> {
+        let key = task_archive_key(project, task);
+        let credentials = Some(&self.credentials);
+        let head = self.bucket.head_object(credentials, &key);
+        let found = self
+            .send(Method::HEAD, head.sign(REQUEST_URL_LIFETIME), &key)
+            .await?;
+        if found == StatusCode::NOT_FOUND {
+            return Ok(TaskArchiveState::Missing);
+        }
+        let delete = self.bucket.delete_object(credentials, &key);
+        self.send(Method::DELETE, delete.sign(REQUEST_URL_LIFETIME), &key)
+            .await?;
+        Ok(TaskArchiveState::Deleted)
+    }
+
+    async fn send(
+        &self,
+        method: Method,
+        url: Url,
+        key: &str,
+    ) -> Result<StatusCode, TaskArchivesError> {
+        let response = self
+            .client
+            .request(method.clone(), url)
+            .send()
+            .await
+            .map_err(|source| TaskArchivesError::Request {
+                method: method.clone(),
+                key: key.to_owned(),
+                source,
+            })?;
+        let status = response.status();
+        if status.is_success() || (method == Method::HEAD && status == StatusCode::NOT_FOUND) {
+            Ok(status)
+        } else {
+            Err(TaskArchivesError::Answer {
+                method,
+                key: key.to_owned(),
+                status,
+            })
+        }
+    }
+}
+
 impl fmt::Debug for TaskArchiveBucket {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -84,6 +163,23 @@ impl fmt::Debug for TaskArchiveBucket {
             .field("region", &self.bucket.region())
             .finish_non_exhaustive()
     }
+}
+
+fn http_client() -> Result<Client, TaskArchivesError> {
+    let roots = rustls::RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+    };
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let tls = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|error| TaskArchivesError::Client(error.to_string()))?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    Client::builder()
+        .tls_backend_preconfigured(tls)
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|error| TaskArchivesError::Client(error.to_string()))
 }
 
 fn task_archive_key(project: &ProjectId, task: &TaskId) -> String {

@@ -13,6 +13,7 @@ mod projects;
 mod router;
 mod runs;
 mod sse;
+mod tasks;
 
 use std::sync::Arc;
 

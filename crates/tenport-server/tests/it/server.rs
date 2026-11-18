@@ -13,10 +13,13 @@ use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::task_archives::TaskArchiveBucket;
 use tokio::net::TcpListener;
 
+use crate::bucket::FakeBucket;
+
 pub struct TestServer {
     pub address: SocketAddr,
     pub db: Db,
     pub cluster: Arc<FakeCluster>,
+    pub bucket: FakeBucket,
     _dir: TempDir,
 }
 
@@ -30,12 +33,14 @@ impl TestServer {
     }
 
     pub async fn start_with(cluster: FakeCluster, limits: Limits) -> Self {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let dir = tempfile::tempdir().unwrap();
         let db = db::open(&dir.path().join("tenport.db")).await.unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let cluster = Arc::new(cluster);
-        let runs = runs_on(cluster.clone());
+        let bucket = FakeBucket::start().await;
+        let runs = runs_on(cluster.clone(), &bucket.url);
         let app = router(AppState {
             db: db.clone(),
             cluster: cluster.clone(),
@@ -47,6 +52,7 @@ impl TestServer {
             address,
             db,
             cluster,
+            bucket,
             _dir: dir,
         }
     }
@@ -75,21 +81,20 @@ impl TestServer {
     }
 }
 
-fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
+fn runs_on(cluster: Arc<FakeCluster>, bucket_url: &str) -> Runs {
     let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
     let template = RunTemplate {
         dir: tests.join("run-template"),
         services_dir: tests.join("run-services"),
     };
-    Runs::new(cluster, template, "box:1".to_owned(), test_bucket())
+    Runs::new(
+        cluster,
+        template,
+        "box:1".to_owned(),
+        test_bucket(bucket_url),
+    )
 }
 
-fn test_bucket() -> TaskArchiveBucket {
-    TaskArchiveBucket::new(
-        "https://objects.example.test/tenbox-test",
-        "hel1",
-        "key-id".to_owned(),
-        "key-secret".to_owned(),
-    )
-    .unwrap()
+fn test_bucket(url: &str) -> TaskArchiveBucket {
+    TaskArchiveBucket::new(url, "hel1", "key-id".to_owned(), "key-secret".to_owned()).unwrap()
 }
