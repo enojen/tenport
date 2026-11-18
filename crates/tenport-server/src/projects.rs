@@ -66,8 +66,7 @@ pub async fn list_of_user(
     after: Option<&ProjectId>,
     limit: i64,
 ) -> Result<Vec<Project>, ProjectsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::list_projects_of_user(&mut conn, user, after, limit).await?)
+    Ok(store::list_projects_of_user(db, user, after, limit).await?)
 }
 
 pub async fn write_secret(
@@ -129,8 +128,7 @@ pub async fn list_secrets(
     project: &ProjectId,
 ) -> Result<Vec<SecretState>, ProjectsError> {
     require_member(db, user, project).await?;
-    let mut conn = db.acquire().await?;
-    Ok(store::list_secrets_of_project(&mut conn, project).await?)
+    Ok(store::list_secrets_of_project(db, project).await?)
 }
 
 async fn find_secret(
@@ -138,8 +136,7 @@ async fn find_secret(
     project: &ProjectId,
     secret: ProjectSecret,
 ) -> Result<Option<SecretState>, ProjectsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::find_secret(&mut conn, project, secret).await?)
+    Ok(store::find_secret(db, project, secret).await?)
 }
 
 pub(crate) async fn apply(
@@ -158,8 +155,7 @@ pub(crate) async fn apply(
 }
 
 pub async fn find(db: &Db, project: &ProjectId) -> Result<Option<Project>, ProjectsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::find_project(&mut conn, project).await?)
+    Ok(store::find_project(db, project).await?)
 }
 
 pub async fn require_member(
@@ -167,20 +163,20 @@ pub async fn require_member(
     user: &UserId,
     project: &ProjectId,
 ) -> Result<Project, ProjectsError> {
-    find_project_for_member(db, user, project)
+    let (project, _) = require_project_and_role(db, user, project).await?;
+    Ok(project)
+}
+
+async fn require_project_and_role(
+    db: &Db,
+    user: &UserId,
+    project: &ProjectId,
+) -> Result<(Project, Role), ProjectsError> {
+    store::find_project_and_role_of_user(db, project, user)
         .await?
         .ok_or_else(|| ProjectsError::NotMember {
             project: project.clone(),
         })
-}
-
-async fn find_project_for_member(
-    db: &Db,
-    user: &UserId,
-    project: &ProjectId,
-) -> Result<Option<Project>, ProjectsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::find_project_for_member(&mut conn, project, user).await?)
 }
 
 async fn require_project_admin(
@@ -188,13 +184,9 @@ async fn require_project_admin(
     user: &UserId,
     project: &ProjectId,
 ) -> Result<(), ProjectsError> {
-    let mut conn = db.acquire().await?;
-    match store::find_role_of_user_in_project(&mut conn, project, user).await? {
-        Some(Role::Admin) => Ok(()),
-        Some(Role::Member) => Err(ProjectsError::NotProjectAdmin {
-            project: project.clone(),
-        }),
-        None => Err(ProjectsError::NotMember {
+    match require_project_and_role(db, user, project).await? {
+        (_, Role::Admin) => Ok(()),
+        (_, Role::Member) => Err(ProjectsError::NotProjectAdmin {
             project: project.clone(),
         }),
     }

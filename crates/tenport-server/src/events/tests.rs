@@ -22,9 +22,7 @@ fn entry(event: Event) -> Entry {
 }
 
 async fn events_in(db: &Db) -> i64 {
-    store::count_events(&mut db.acquire().await.unwrap())
-        .await
-        .unwrap()
+    store::count_events(db).await.unwrap()
 }
 
 #[tokio::test]
@@ -32,8 +30,7 @@ async fn writes_the_event_and_its_table_together() {
     let (db, _dir) = db::temp().await;
     let event = organization_added("Wegobi");
     let id = append(&db, Actor::Server, event.clone()).await.unwrap();
-    let mut conn = db.acquire().await.unwrap();
-    let row = store::find_event_by_id(&mut conn, &id.to_string())
+    let row = store::find_event_by_id(&db, &id.to_string())
         .await
         .unwrap()
         .unwrap();

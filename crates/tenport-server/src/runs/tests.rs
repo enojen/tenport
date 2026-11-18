@@ -55,9 +55,7 @@ fn build(project: &ProjectId) -> NewRun {
 }
 
 async fn count_runs(db: &Db) -> i64 {
-    store::count_runs(&mut db.acquire().await.unwrap())
-        .await
-        .unwrap()
+    store::count_runs(db).await.unwrap()
 }
 
 #[tokio::test]
