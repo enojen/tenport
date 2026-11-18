@@ -4,6 +4,7 @@ use super::*;
 use crate::accounts::{OrgId, Role};
 use crate::fixtures::{project_of, register};
 use crate::projects::Repo;
+use crate::run_credentials::RunCredentialKey;
 use crate::task_archives::TaskArchiveBucket;
 use std::time::Duration;
 
@@ -21,7 +22,13 @@ fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
         dir: tests.join("run-template"),
         services_dir: tests.join("run-services"),
     };
-    Runs::new(cluster, template, "box:1".to_owned(), test_bucket())
+    Runs::new(
+        cluster,
+        template,
+        "box:1".to_owned(),
+        test_bucket(),
+        RunCredentialKey::new(RUN_CREDENTIAL_KEY),
+    )
 }
 
 fn build(project: &ProjectId) -> NewRun {
@@ -120,6 +127,8 @@ fn the_run_stamp_is_month_day_and_time_in_utc() {
     let at = OffsetDateTime::from_unix_timestamp(1_794_906_303).unwrap();
     assert_eq!(run_stamp(at), "1117-090503");
 }
+
+pub const RUN_CREDENTIAL_KEY: &str = "key-for-tests";
 
 fn test_bucket() -> TaskArchiveBucket {
     TaskArchiveBucket::new(

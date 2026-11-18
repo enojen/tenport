@@ -14,12 +14,13 @@ use time::OffsetDateTime;
 use tokio::sync::Mutex;
 
 use crate::accounts::{Email, UserId};
+use crate::run_credentials::{RUN_TOKEN_KEY, RunCredentialKey, run_token_secret};
 use crate::task_archives::{TaskArchiveBucket, TaskArchiveState, TaskArchivesError};
 use futures::future::try_join_all;
 use futures::try_join;
 
 use crate::cluster::{
-    Cluster, ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodState,
+    Cluster, ClusterError, CreatedJob, JobName, JobPhase, JobState, LogRead, LogReader, PodState,
 };
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
@@ -97,6 +98,7 @@ pub struct Runs {
     template: RunTemplate,
     box_image: String,
     task_archives: TaskArchiveBucket,
+    run_credential_key: RunCredentialKey,
     start_lock: Mutex<()>,
 }
 
@@ -106,12 +108,14 @@ impl Runs {
         template: RunTemplate,
         box_image: String,
         task_archives: TaskArchiveBucket,
+        run_credential_key: RunCredentialKey,
     ) -> Self {
         Self {
             cluster,
             template,
             box_image,
             task_archives,
+            run_credential_key,
             start_lock: Mutex::new(()),
         }
     }
@@ -149,7 +153,21 @@ impl Runs {
         self.require_idle(project, &new.task).await?;
         let fields = self.fields(project, new, OffsetDateTime::now_utc());
         let job = self.template.job(&fields, &new.services).await?;
-        Ok(RunName::from(self.cluster.create_job(job).await?))
+        let created = self.cluster.create_job(job).await?;
+        if let Err(error) = self.write_run_token_secret(&created).await {
+            self.cluster.delete_job(&created.name).await?;
+            return Err(error);
+        }
+        Ok(RunName::from(created.name))
+    }
+
+    async fn write_run_token_secret(&self, job: &CreatedJob) -> Result<(), RunsError> {
+        let placeholder = self.run_credential_key.placeholder(&job.uid);
+        let secret = run_token_secret(&job.name);
+        self.cluster
+            .create_job_secret(&secret, job, RUN_TOKEN_KEY, &placeholder)
+            .await?;
+        Ok(())
     }
 
     pub async fn list_of_task(

@@ -7,6 +7,7 @@ use tenport_server::cluster::{Cluster, KubeCluster};
 use tenport_server::command::{self, Command, USAGE};
 use tenport_server::config::Config;
 use tenport_server::http::{self, AppState, Limiter, Limits};
+use tenport_server::run_credentials::RunCredentialKey;
 use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::task_archives::TaskArchiveBucket;
 use tenport_server::{db, logs};
@@ -55,6 +56,11 @@ async fn serve() -> anyhow::Result<()> {
         "TENPORT_TASK_ARCHIVE_BUCKET is not set: runs need the bucket of the task archives",
     )?;
     let task_archives = TaskArchiveBucket::open(bucket)?;
+    let key_file = config
+        .run_credential_key_file
+        .as_ref()
+        .context("TENPORT_RUN_CREDENTIAL_KEY_FILE is not set: each run needs a placeholder")?;
+    let run_credential_key = RunCredentialKey::read(key_file)?;
     let db = db::open(&config.database).await?;
     let cluster = KubeCluster::connect(&config.run_namespace)
         .await
@@ -64,7 +70,13 @@ async fn serve() -> anyhow::Result<()> {
         services_dir: config.run_services,
     };
     let cluster: Arc<dyn Cluster> = Arc::new(cluster);
-    let runs = Runs::new(cluster.clone(), template, config.box_image, task_archives);
+    let runs = Runs::new(
+        cluster.clone(),
+        template,
+        config.box_image,
+        task_archives,
+        run_credential_key,
+    );
     let listener = TcpListener::bind(config.listen)
         .await
         .with_context(|| format!("cannot listen on {}", config.listen))?;

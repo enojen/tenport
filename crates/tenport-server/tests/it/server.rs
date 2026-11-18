@@ -9,6 +9,7 @@ use tenport_server::db::{self, Db};
 use tenport_server::events::Actor;
 use tenport_server::http::{AppState, Limiter, Limits, router};
 use tenport_server::name::Name;
+use tenport_server::run_credentials::RunCredentialKey;
 use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::task_archives::TaskArchiveBucket;
 use tokio::net::TcpListener;
@@ -92,8 +93,11 @@ fn runs_on(cluster: Arc<FakeCluster>, bucket_url: &str) -> Runs {
         template,
         "box:1".to_owned(),
         test_bucket(bucket_url),
+        RunCredentialKey::new(RUN_CREDENTIAL_KEY),
     )
 }
+
+pub const RUN_CREDENTIAL_KEY: &str = "key-for-tests";
 
 fn test_bucket(url: &str) -> TaskArchiveBucket {
     TaskArchiveBucket::new(url, "hel1", "key-id".to_owned(), "key-secret".to_owned()).unwrap()

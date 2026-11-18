@@ -116,3 +116,19 @@ fn refuses_an_archive_bucket_that_misses_one_of_its_names() {
         })
     );
 }
+
+#[test]
+fn reads_the_run_credential_key_file_when_it_is_set() {
+    let unset = config(&[(DATABASE, "tenport.db")]).unwrap();
+    let set = config(&[
+        (DATABASE, "tenport.db"),
+        (RUN_CREDENTIAL_KEY_FILE, "/run-credentials/key"),
+    ])
+    .unwrap();
+
+    assert_eq!(unset.run_credential_key_file, None);
+    assert_eq!(
+        set.run_credential_key_file,
+        Some(PathBuf::from("/run-credentials/key"))
+    );
+}

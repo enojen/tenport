@@ -4,7 +4,7 @@ use k8s_openapi::api::batch::v1::Job;
 use std::collections::BTreeMap;
 
 use k8s_openapi::api::core::v1::{ContainerStatus, Pod, Secret};
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::api::{DeleteParams, ListParams, LogParams, Patch, PatchParams, PostParams};
 use kube::{Api, Client};
 use serde_json::{Value, json};
@@ -12,7 +12,8 @@ use time::OffsetDateTime;
 
 use super::Cluster;
 use super::model::{
-    ClusterError, JobName, JobPhase, JobState, LogRead, LogReader, PodName, PodState, SecretName,
+    ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogRead, LogReader, PodName,
+    PodState, SecretName,
 };
 
 const BOX_CONTAINER: &str = "box";
@@ -42,10 +43,16 @@ impl KubeCluster {
         }
     }
 
-    async fn create(&self, job: Job) -> Result<JobName, ClusterError> {
+    async fn create(&self, job: Job) -> Result<CreatedJob, ClusterError> {
         let name = JobName::new(job.metadata.name.clone().ok_or(ClusterError::NoName)?);
         match self.jobs.create(&PostParams::default(), &job).await {
-            Ok(_) => Ok(name),
+            Ok(created) => match created.metadata.uid {
+                Some(uid) => Ok(CreatedJob {
+                    name,
+                    uid: JobUid::new(uid),
+                }),
+                None => Err(ClusterError::NoUid(name)),
+            },
             Err(error) if status_code(&error) == Some(CONFLICT) => Err(ClusterError::Exists(name)),
             Err(error) => Err(ClusterError::Kube(error)),
         }
@@ -105,6 +112,26 @@ impl KubeCluster {
         }
     }
 
+    async fn create_owned_secret(
+        &self,
+        secret: &SecretName,
+        owner: &CreatedJob,
+        key: &str,
+        value: &str,
+    ) -> Result<(), ClusterError> {
+        let params = PostParams {
+            field_manager: Some(FIELD_MANAGER.to_owned()),
+            ..PostParams::default()
+        };
+        let mut new = new_secret(secret, key, value);
+        new.metadata.owner_references = Some(vec![job_owner(owner)]);
+        self.secrets
+            .create(&params, &new)
+            .await
+            .map(|_| ())
+            .map_err(ClusterError::Kube)
+    }
+
     async fn create_secret(
         &self,
         secret: &SecretName,
@@ -158,7 +185,7 @@ impl KubeCluster {
 }
 
 impl Cluster for KubeCluster {
-    fn create_job(&self, job: Job) -> BoxFuture<'_, Result<JobName, ClusterError>> {
+    fn create_job(&self, job: Job) -> BoxFuture<'_, Result<CreatedJob, ClusterError>> {
         self.create(job).boxed()
     }
 
@@ -204,6 +231,16 @@ impl Cluster for KubeCluster {
     ) -> BoxFuture<'a, Result<bool, ClusterError>> {
         self.delete_key(secret, key).boxed()
     }
+
+    fn create_job_secret<'a>(
+        &'a self,
+        secret: &'a SecretName,
+        owner: &'a CreatedJob,
+        key: &'a str,
+        value: &'a str,
+    ) -> BoxFuture<'a, Result<(), ClusterError>> {
+        self.create_owned_secret(secret, owner, key, value).boxed()
+    }
 }
 
 fn string_data(key: &str, value: &str) -> Value {
@@ -219,6 +256,16 @@ fn new_secret(secret: &SecretName, key: &str, value: &str) -> Secret {
         type_: Some(OPAQUE.to_owned()),
         string_data: Some(BTreeMap::from([(key.to_owned(), value.to_owned())])),
         ..Secret::default()
+    }
+}
+
+fn job_owner(job: &CreatedJob) -> OwnerReference {
+    OwnerReference {
+        api_version: "batch/v1".to_owned(),
+        kind: "Job".to_owned(),
+        name: job.name.as_str().to_owned(),
+        uid: job.uid.as_str().to_owned(),
+        ..OwnerReference::default()
     }
 }
 
