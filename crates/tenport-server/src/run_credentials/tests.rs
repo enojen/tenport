@@ -3,12 +3,12 @@ use std::fs;
 use super::*;
 
 #[test]
-fn the_run_token_secret_of_a_job_is_its_name_and_github() {
+fn the_run_placeholder_secret_of_a_job_is_its_name_and_placeholder() {
     let job = JobName::new("task-ten-301-1118-101500");
 
     assert_eq!(
-        run_token_secret(&job).as_str(),
-        "task-ten-301-1118-101500-github"
+        run_placeholder_secret(&job).as_str(),
+        "task-ten-301-1118-101500-placeholder"
     );
 }
 

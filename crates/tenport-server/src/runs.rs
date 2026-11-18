@@ -15,7 +15,7 @@ use time::OffsetDateTime;
 use tokio::sync::{Mutex, MutexGuard};
 
 use crate::accounts::{Email, UserId};
-use crate::run_credentials::{RUN_TOKEN_KEY, RunCredentials, run_token_secret};
+use crate::run_credentials::{RUN_PLACEHOLDER_KEY, RunCredentials, run_placeholder_secret};
 use crate::task_archives::TaskArchiveBucket;
 use futures::future::try_join_all;
 
@@ -147,18 +147,18 @@ impl Runs {
         );
         let job = self.template.job(&fields, &new.services).await?;
         let created = self.cluster.create_job(job).await?;
-        if let Err(error) = self.write_run_token_secret(&created).await {
+        if let Err(error) = self.write_run_placeholder_secret(&created).await {
             self.cluster.delete_job(&created.name).await?;
             return Err(error);
         }
         Ok(RunName::from(created.name))
     }
 
-    async fn write_run_token_secret(&self, job: &CreatedJob) -> Result<(), RunsError> {
+    async fn write_run_placeholder_secret(&self, job: &CreatedJob) -> Result<(), RunsError> {
         let placeholder = self.run_credentials.placeholder(&job.uid);
-        let secret = run_token_secret(&job.name);
+        let secret = run_placeholder_secret(&job.name);
         self.cluster
-            .create_job_secret(&secret, job, RUN_TOKEN_KEY, &placeholder)
+            .create_job_secret(&secret, job, RUN_PLACEHOLDER_KEY, &placeholder)
             .await?;
         Ok(())
     }

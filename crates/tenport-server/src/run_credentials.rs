@@ -17,7 +17,7 @@ use crate::projects::{self, ProjectId, ProjectsError};
 #[cfg(test)]
 mod tests;
 
-pub const RUN_TOKEN_KEY: &str = "token";
+pub const RUN_PLACEHOLDER_KEY: &str = "placeholder";
 const TOKEN_REUSE_MARGIN: time::Duration = time::Duration::minutes(5);
 
 #[derive(Debug, thiserror::Error)]
@@ -161,8 +161,8 @@ impl fmt::Debug for InjectorToken {
     }
 }
 
-pub fn run_token_secret(job: &JobName) -> SecretName {
-    SecretName::new(format!("{}-github", job.as_str()))
+pub fn run_placeholder_secret(job: &JobName) -> SecretName {
+    SecretName::new(format!("{}-placeholder", job.as_str()))
 }
 
 fn read_secret(path: &Path) -> Result<String, RunCredentialsError> {

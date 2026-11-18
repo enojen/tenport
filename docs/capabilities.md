@@ -362,9 +362,9 @@ The steps, in order:
      refuses it with 400. Tenport sends the HEAD and the DELETE to the bucket itself, with
      the Mozilla roots built in, as its image has no CA files. Done: tenport #34.
    - The placeholder (4a): right after a Job is created, Tenport writes the Secret
-     `<job>-github` with `token`, the placeholder `tbxph_` and the base64url HMAC-SHA256 of the
-     Job's uid under the key of `TENPORT_RUN_CREDENTIAL_KEY_FILE`, the same as the tenbox
-     server's. The Job owns the Secret, so Kubernetes deletes it with the Job. When the write
+     `<job>-placeholder` with the key `placeholder`: the prefix `tbxph_` and the base64url
+     HMAC-SHA256 of the Job's uid under the key of `TENPORT_RUN_CREDENTIAL_KEY_FILE`, the same
+     as the tenbox server's. The Job owns the Secret, so Kubernetes deletes it with the Job. When the write
      fails, Tenport deletes the Job. Tenport does not serve without the key. Done: tenport #36.
    - `POST /run-credentials` (4b): the injector sends `{placeholder, host}` with the injector
      token of `TENPORT_INJECTOR_TOKEN_FILE` and gets `{ok, value}`, the one-hour token of the
