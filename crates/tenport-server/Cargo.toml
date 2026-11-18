@@ -15,12 +15,14 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+base64.workspace = true
 futures.workspace = true
 hex.workspace = true
 k8s-openapi.workspace = true
 kube.workspace = true
 rand.workspace = true
 reqwest.workspace = true
+ring.workspace = true
 rustls.workspace = true
 rusty-s3.workspace = true
 serde.workspace = true

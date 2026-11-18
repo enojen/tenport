@@ -7,20 +7,23 @@ use tenport_server::accounts::{self, GithubLogin, NewUser, Registration, Role, T
 use tenport_server::cluster::FakeCluster;
 use tenport_server::db::{self, Db};
 use tenport_server::events::Actor;
+use tenport_server::github::GithubApp;
 use tenport_server::http::{AppState, Limiter, Limits, router};
 use tenport_server::name::Name;
-use tenport_server::run_credentials::RunCredentialKey;
+use tenport_server::run_credentials::{InjectorToken, RunCredentialKey};
 use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::task_archives::TaskArchiveBucket;
 use tokio::net::TcpListener;
 
 use crate::bucket::FakeBucket;
+use crate::github::FakeGithub;
 
 pub struct TestServer {
     pub address: SocketAddr,
     pub db: Db,
     pub cluster: Arc<FakeCluster>,
     pub bucket: FakeBucket,
+    pub github: FakeGithub,
     _dir: TempDir,
 }
 
@@ -41,11 +44,13 @@ impl TestServer {
         let address = listener.local_addr().unwrap();
         let cluster = Arc::new(cluster);
         let bucket = FakeBucket::start().await;
-        let runs = runs_on(cluster.clone(), &bucket.url);
+        let github = FakeGithub::start().await;
+        let runs = runs_on(cluster.clone(), &bucket.url, &github.url);
         let app = router(AppState {
             db: db.clone(),
             cluster: cluster.clone(),
             runs: Arc::new(runs),
+            injector_token: Arc::new(InjectorToken::new(INJECTOR_TOKEN)),
             limiter: Arc::new(Limiter::new(limits)),
         });
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -54,6 +59,7 @@ impl TestServer {
             db,
             cluster,
             bucket,
+            github,
             _dir: dir,
         }
     }
@@ -82,7 +88,7 @@ impl TestServer {
     }
 }
 
-fn runs_on(cluster: Arc<FakeCluster>, bucket_url: &str) -> Runs {
+fn runs_on(cluster: Arc<FakeCluster>, bucket_url: &str, github_url: &str) -> Runs {
     let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
     let template = RunTemplate {
         dir: tests.join("run-template"),
@@ -94,10 +100,14 @@ fn runs_on(cluster: Arc<FakeCluster>, bucket_url: &str) -> Runs {
         "box:1".to_owned(),
         test_bucket(bucket_url),
         RunCredentialKey::new(RUN_CREDENTIAL_KEY),
+        GithubApp::new(GITHUB_APP_ID, GITHUB_APP_KEY, github_url).unwrap(),
     )
 }
 
 pub const RUN_CREDENTIAL_KEY: &str = "key-for-tests";
+pub const INJECTOR_TOKEN: &str = "injector-token-for-tests";
+pub const GITHUB_APP_ID: &str = "5669876";
+const GITHUB_APP_KEY: &str = include_str!("../github-app-test-key.pem");
 
 fn test_bucket(url: &str) -> TaskArchiveBucket {
     TaskArchiveBucket::new(url, "hel1", "key-id".to_owned(), "key-secret".to_owned()).unwrap()

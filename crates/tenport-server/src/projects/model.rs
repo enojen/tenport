@@ -34,6 +34,10 @@ impl Repo {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn name(&self) -> &str {
+        self.0.split_once('/').map_or(&self.0, |(_, name)| name)
+    }
 }
 
 fn is_owner(owner: &str) -> bool {

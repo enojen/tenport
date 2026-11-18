@@ -278,9 +278,11 @@ fn status_code(error: &kube::Error) -> Option<u16> {
 
 fn job_state(job: &Job) -> Option<JobState> {
     let name = JobName::new(job.metadata.name.clone()?);
+    let uid = JobUid::new(job.metadata.uid.clone()?);
     let created = to_offset_date_time(job.metadata.creation_timestamp.as_ref()?.0)?;
     Some(JobState {
         name,
+        uid,
         labels: job.metadata.labels.clone().unwrap_or_default(),
         created,
         phase: job_phase(job),

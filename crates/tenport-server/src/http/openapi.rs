@@ -6,6 +6,7 @@ use super::error::{NotMember, TooManyRequests, Unauthorized, Unavailable};
 use crate::runs::command_rules;
 
 const BEARER_SCHEME: &str = "bearer";
+const INJECTOR_SCHEME: &str = "injector";
 const RUN_COMMAND_POINTER: &str = "/components/schemas/NewRun/properties/command";
 const COMMANDS_EXTENSION: &str = "x-tenbox-commands";
 
@@ -29,6 +30,17 @@ impl Modify for BearerToken {
         components.add_security_scheme(
             BEARER_SCHEME,
             SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).build()),
+        );
+        components.add_security_scheme(
+            INJECTOR_SCHEME,
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .description(Some(
+                        "The injector token: only the injector of the egress proxy has it",
+                    ))
+                    .build(),
+            ),
         );
     }
 }

@@ -1,7 +1,6 @@
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::{Client, Method, StatusCode};
@@ -11,6 +10,7 @@ use url::Url;
 use utoipa::ToSchema;
 
 use crate::config::TaskArchiveBucketConfig;
+use crate::https::{HttpsError, https_client};
 use crate::projects::ProjectId;
 use crate::tasks::TaskId;
 
@@ -29,8 +29,8 @@ pub enum TaskArchivesError {
     Empty { path: PathBuf },
     #[error("the bucket {url} is not an http(s) URL with the bucket name as its path: {detail}")]
     BadUrl { url: String, detail: String },
-    #[error("cannot make the HTTP client of the bucket: {0}")]
-    Client(String),
+    #[error(transparent)]
+    Client(#[from] HttpsError),
     #[error("the bucket did not answer {method} {key}: {source}")]
     Request {
         method: Method,
@@ -74,7 +74,7 @@ impl TaskArchiveBucket {
         Ok(Self {
             bucket: bucket(url, region)?,
             credentials: Credentials::new(key, secret),
-            client: http_client()?,
+            client: https_client(REQUEST_TIMEOUT)?,
         })
     }
 
@@ -163,23 +163,6 @@ impl fmt::Debug for TaskArchiveBucket {
             .field("region", &self.bucket.region())
             .finish_non_exhaustive()
     }
-}
-
-fn http_client() -> Result<Client, TaskArchivesError> {
-    let roots = rustls::RootCertStore {
-        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-    };
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|error| TaskArchivesError::Client(error.to_string()))?
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    Client::builder()
-        .tls_backend_preconfigured(tls)
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-        .map_err(|error| TaskArchivesError::Client(error.to_string()))
 }
 
 fn task_archive_key(project: &ProjectId, task: &TaskId) -> String {

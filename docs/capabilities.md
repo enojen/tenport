@@ -354,7 +354,12 @@ The steps, in order:
    - `POST /run-credentials` (4b): the injector sends `{placeholder, host}` with the injector
      token of `TENPORT_INJECTOR_TOKEN_FILE` and gets `{ok, value}`, the one-hour token of the
      GitHub App (`TENPORT_GITHUB_APP_ID`, `TENPORT_GITHUB_APP_KEY_FILE`) for the repository of
-     the open Job whose placeholder it is.
+     the open Job whose placeholder it is. Only a Running Job labelled
+     `app.kubernetes.io/managed-by=tenport` counts; the host must be `github.com` or
+     `api.github.com`. 404 for any other placeholder or host, or when the App is not installed
+     on the repository; 401 without the injector token. Tenport keeps the token of each open Job
+     and makes a new one 5 minutes before it ends. The answer is `{value}`: Tenport's answers
+     have no `ok`, and the injector reads only `value`.
    - tenyard (4c): `egress/proxy-tenport`, the same injector image asking Tenport; Tenport's run
      template points `HTTPS_PROXY` at it. The App key is the same; the placeholder key and the
      injector token are new values, so neither server can use the other's.

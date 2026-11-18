@@ -455,6 +455,34 @@
         ],
         "type": "object"
       },
+      "RunCredential": {
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "type": "object"
+      },
+      "RunCredentialRequest": {
+        "properties": {
+          "host": {
+            "example": "api.github.com",
+            "type": "string"
+          },
+          "placeholder": {
+            "example": "tbxph_ETORSF6tK5Aq-PPCa0hncaILEOC-43LTqxG9R15MW38",
+            "type": "string"
+          }
+        },
+        "required": [
+          "placeholder",
+          "host"
+        ],
+        "type": "object"
+      },
       "RunPhase": {
         "enum": [
           "Running",
@@ -664,6 +692,11 @@
     },
     "securitySchemes": {
       "bearer": {
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "injector": {
+        "description": "The injector token: only the injector of the egress proxy has it",
         "scheme": "bearer",
         "type": "http"
       }
@@ -1127,6 +1160,75 @@
         "security": [
           {
             "bearer": []
+          }
+        ]
+      }
+    },
+    "/run-credentials": {
+      "post": {
+        "operationId": "run_credential",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCredentialRequest"
+              }
+            }
+          },
+          "description": "A placeholder that a box sent, and the host it sent it to",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCredential"
+                }
+              }
+            },
+            "description": "The one-hour GitHub App token for the repository of the open Job that has this placeholder"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The body is not a placeholder and a host"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No injector token, or another one"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No open Job of Tenport has this placeholder, the host is not GitHub, or the GitHub App is not installed on the repository"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "security": [
+          {
+            "injector": []
           }
         ]
       }
