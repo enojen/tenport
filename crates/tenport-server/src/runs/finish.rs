@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::AsyncReadExt;
+use serde_json::Value;
 
-use super::box_log;
 use super::model::{Finish, FinishedPhase, Run, RunFinished, RunPhase, RunState, RunsEvent};
 use super::{Runs, RunsError, TENPORT_JOBS, find_job_in, find_run, store};
 use crate::cluster::{ClusterError, JobPhase, JobState, LogRead, PodName, PodState};
@@ -11,6 +11,9 @@ use crate::db::Db;
 use crate::events::{self, Actor, Event, EventsError};
 
 const BACKOFF_LIMIT_EXCEEDED: &str = "BackoffLimitExceeded";
+const OBJECT_START: &str = "{";
+const OBJECT_END: &str = "}";
+const OOM_KILL: &str = "oom_kill ";
 
 impl Runs {
     pub async fn record_finished_runs_every(self: Arc<Self>, db: Db, period: Duration) {
@@ -119,8 +122,8 @@ impl Runs {
             phase,
             reason: finished_reason(job, pod.as_ref()),
             exit_code: pod.as_ref().and_then(|pod| pod.exit_code),
-            oom_kill: box_log::oom_kill(&log),
-            output: box_log::command_output(&log),
+            oom_kill: oom_kill(&log),
+            output: command_output(&log),
         };
         self.finish(db, run, finish).await
     }
@@ -172,3 +175,23 @@ fn finished_reason(job: &JobState, pod: Option<&PodState>) -> Option<String> {
         .or_else(|| pod.and_then(|pod| pod.pod_reason.clone()))
         .or_else(|| pod.and_then(|pod| pod.reason.clone()))
 }
+
+fn command_output(log: &str) -> Option<Value> {
+    let lines: Vec<&str> = log.lines().collect();
+    let end = lines.iter().rposition(|line| *line == OBJECT_END)?;
+    let start = lines[..end]
+        .iter()
+        .rposition(|line| *line == OBJECT_START)?;
+    let value: Value = serde_json::from_str(&lines[start..=end].join("\n")).ok()?;
+    value.is_object().then_some(value)
+}
+
+fn oom_kill(log: &str) -> Option<u64> {
+    log.lines()
+        .rev()
+        .find_map(|line| line.rsplit_once(OOM_KILL))
+        .and_then(|(_, count)| count.trim().parse().ok())
+}
+
+#[cfg(test)]
+mod tests;

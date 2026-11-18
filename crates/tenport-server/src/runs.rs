@@ -1,6 +1,5 @@
-mod box_log;
 mod command;
-mod finished;
+mod finish;
 mod model;
 mod repo_tokens;
 mod store;
