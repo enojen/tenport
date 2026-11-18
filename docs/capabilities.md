@@ -248,6 +248,11 @@ kubeconfig, no bucket keys, no project secrets. Then `server/` and the CLI's Kub
 deleted from tenbox. The live server runs the image of tenbox commit `71dbd66`; no commit after it
 changes the server.
 
+Each step deletes the code it leaves dead, in the same step and in every repository (decided,
+2026-11-18), while the work is fresh: the CLI's Kubernetes code goes in step 6, not in step 11.
+`server/` is the one exception: the live server is frozen at `71dbd66` and still watches the
+nodes, the costs and the backups, so it goes whole in step 11.
+
 Decided (2026-11-17):
 
 - Tenport starts the Jobs. `task/job.yaml` stays in tenyard; Flux gives it to Tenport as a
@@ -294,8 +299,8 @@ What the tenbox server and the CLI do, and where Tenport is:
 | The CLI makes the presigned links of the task archive, with the bucket keys on the computer | Done: Tenport makes them for its own Jobs; the CLI stops in step 6 |
 | `POST /run-credentials`: the injector sends a Job's placeholder and gets the real GitHub token, good for one hour and only for that project's repository. This route needs the injector token, not a user token | Done |
 | A placeholder Secret for each new Job | Done |
-| `run.finished` when a box container ends, with the OOM count and the close output from the pod log | Step 5 |
-| `GET /tasks/{task}/runs`: the runs of a task | Step 5 |
+| `run.finished` when a box container ends, with the OOM count and the close output from the pod log | Done: with the exit code and the output of every command, not of `close` only |
+| `GET /tasks/{task}/runs`: the runs of a task | Done as `GET /runs?project=<id>&task=<id>` |
 | Nodes, every 30 seconds: a worker that comes or goes, with its Hetzner type and hourly price | Step 8 |
 | Task volumes: their price, the deletion after the grace period and the ntfy notice | Not moved: no task volumes |
 | `GET /costs?from&to`, the `costs` command and `GET /metrics` | Step 9 |
@@ -382,6 +387,21 @@ The steps, in order:
    session waits for a run with `GET /runs/{name}` until `phase` is not `Running`, and reads
    `phase`, `reason` and `output` there: it never reads a log. A followed log is for a person,
    in a terminal or in the panel.
+   Done (2026-11-18): `run.finished` holds `phase` (`Succeeded`, `Failed` or `Unknown`),
+   `reason`, `exit_code`, `oom_kill` and `output`. `reason` is the most exact one: the Job's
+   (`DeadlineExceeded`; not `BackoffLimitExceeded`, which only says the pod failed), else the
+   pod's (`Evicted`), else the box container's (`Completed`, `Error`, `OOMKilled`); a run that
+   `DELETE /runs/{name}` stops is `Failed` with `Stopped`. `exit_code` is the box container's,
+   the code of the tenbox command (`boot.sh` exits with it), 137 when the box was killed.
+   `oom_kill` is the count of the boot line: processes killed for memory inside a box that
+   went on, which no Kubernetes reason shows; null when the box wrote no boot line. `output`
+   is the last top-level JSON object of the box log, a `{` line to a `}` line at column 0, as
+   tenbox prints it. Tenport writes it in
+   two places: a timer lists Tenport's Jobs every 30 seconds, and `GET /runs` and
+   `GET /runs/{name}` write it when they see an ended Job first, so a session that sees
+   `Succeeded` also sees `output`. A run has one `run.finished`; a second is refused. A run
+   whose Job went before Tenport saw it end, as when Tenport is down for more than the 10
+   minutes a Job is kept, ends `Unknown`, so the timer stops looking for it.
 6. The CLI stops talking to the cluster: `tenbox machine run/logs/wait/stop/rm/ls` go to
    Tenport. The kubeconfig and the bucket key file leave the computer.
    - To decide here: a client that only follows `Retry-After` asks forever when the box

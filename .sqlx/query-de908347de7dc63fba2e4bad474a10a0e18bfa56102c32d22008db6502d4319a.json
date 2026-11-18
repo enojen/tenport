@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "update runs set finished_at = ?, phase = ?, reason = ?, exit_code = ?, oom_kill = ?,\n                         output = ?\n         where name = ? and finished_at is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "de908347de7dc63fba2e4bad474a10a0e18bfa56102c32d22008db6502d4319a"
+}

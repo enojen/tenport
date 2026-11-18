@@ -118,6 +118,12 @@ pub struct RunState {
     phase: RunPhase,
     #[schema(example = "OOMKilled")]
     reason: Option<String>,
+    #[schema(example = 0)]
+    exit_code: Option<i32>,
+    #[schema(example = 0)]
+    oom_kill: Option<u64>,
+    #[schema(value_type = Option<Object>, example = json!({ "ok": true, "task": "TEN-301" }))]
+    output: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize, IntoParams)]
@@ -293,6 +299,9 @@ impl From<runs::RunState> for RunState {
             created: run.created,
             phase: state.phase,
             reason: state.reason,
+            exit_code: state.exit_code,
+            oom_kill: state.oom_kill,
+            output: state.output,
         }
     }
 }

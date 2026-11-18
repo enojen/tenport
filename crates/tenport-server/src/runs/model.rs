@@ -102,18 +102,22 @@ parsed_text!(Branch, BranchError);
 pub enum RunsEvent {
     #[serde(rename = "run.started")]
     RunStarted(RunStarted),
+    #[serde(rename = "run.finished")]
+    RunFinished(RunFinished),
 }
 
 impl RunsEvent {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::RunStarted(_) => "run.started",
+            Self::RunFinished(_) => "run.finished",
         }
     }
 
     pub fn subject(&self) -> String {
         match self {
             Self::RunStarted(started) => format!("run:{}", started.run),
+            Self::RunFinished(finished) => format!("run:{}", finished.run),
         }
     }
 }
@@ -127,6 +131,63 @@ pub struct RunStarted {
     pub class: ClassName,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunFinished {
+    pub project: ProjectId,
+    pub task: TaskId,
+    pub run: RunName,
+    #[serde(flatten)]
+    pub finish: Finish,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Finish {
+    pub phase: FinishedPhase,
+    pub reason: Option<String>,
+    pub exit_code: Option<i32>,
+    pub oom_kill: Option<u64>,
+    pub output: Option<serde_json::Value>,
+}
+
+impl Finish {
+    pub fn unknown() -> Self {
+        Self::without_box(FinishedPhase::Unknown, None)
+    }
+
+    pub fn stopped() -> Self {
+        Self::without_box(FinishedPhase::Failed, Some(STOPPED.to_owned()))
+    }
+
+    fn without_box(phase: FinishedPhase, reason: Option<String>) -> Self {
+        Self {
+            phase,
+            reason,
+            exit_code: None,
+            oom_kill: None,
+            output: None,
+        }
+    }
+}
+
+const STOPPED: &str = "Stopped";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+pub enum FinishedPhase {
+    Succeeded,
+    Failed,
+    Unknown,
+}
+
+impl From<FinishedPhase> for RunPhase {
+    fn from(phase: FinishedPhase) -> Self {
+        match phase {
+            FinishedPhase::Succeeded => Self::Succeeded,
+            FinishedPhase::Failed => Self::Failed,
+            FinishedPhase::Unknown => Self::Unknown,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Run {
     pub name: RunName,
@@ -135,6 +196,7 @@ pub struct Run {
     pub command: CommandName,
     pub class: ClassName,
     pub created: OffsetDateTime,
+    pub finished: Option<Finish>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
@@ -160,4 +222,7 @@ pub struct RunState {
     pub run: Run,
     pub phase: RunPhase,
     pub reason: Option<String>,
+    pub exit_code: Option<i32>,
+    pub oom_kill: Option<u64>,
+    pub output: Option<serde_json::Value>,
 }

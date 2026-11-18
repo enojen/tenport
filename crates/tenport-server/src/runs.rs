@@ -1,5 +1,7 @@
 mod command;
+mod finish;
 mod model;
+mod repo_tokens;
 mod store;
 mod template;
 
@@ -14,15 +16,13 @@ use time::OffsetDateTime;
 use tokio::sync::Mutex;
 
 use crate::accounts::{Email, UserId};
-use crate::github::{GITHUB_HOSTS, GithubApp, GithubError, RepoToken};
+use crate::github::{GithubApp, GithubError, RepoToken};
 use crate::run_credentials::{RUN_TOKEN_KEY, RunCredentialKey, run_token_secret};
 use crate::task_archives::{TaskArchiveBucket, TaskArchiveState, TaskArchivesError};
 use futures::future::try_join_all;
-use futures::try_join;
 
 use crate::cluster::{
-    Cluster, ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogRead, LogReader,
-    PodState,
+    Cluster, ClusterError, CreatedJob, JobName, JobState, JobUid, LogRead, LogReader, PodState,
 };
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
@@ -32,8 +32,9 @@ use crate::tasks::{TaskDeleted, TaskId, TasksEvent};
 
 pub use command::{Command, CommandError, CommandName, command_rules};
 pub use model::{
-    Branch, BranchError, ClassName, ClassNameError, Run, RunName, RunNameError, RunPhase,
-    RunStarted, RunState, RunsEvent, ServiceName, ServiceNameError,
+    Branch, BranchError, ClassName, ClassNameError, Finish, FinishedPhase, Run, RunFinished,
+    RunName, RunNameError, RunPhase, RunStarted, RunState, RunsEvent, ServiceName,
+    ServiceNameError,
 };
 pub use template::{RunTemplate, TemplateError};
 
@@ -41,8 +42,6 @@ use template::TemplateFields;
 
 const GITHUB: &str = "https://github.com";
 const TENPORT_JOBS: &str = "app.kubernetes.io/managed-by=tenport";
-const PROJECT_ID_LABEL: &str = "project-id";
-const TOKEN_REUSE_MARGIN: time::Duration = time::Duration::minutes(5);
 const LABEL_VALUE_MAX: usize = 63;
 
 #[derive(Debug, thiserror::Error)]
@@ -54,6 +53,8 @@ pub enum RunsError {
         run: RunName,
         reason: Option<String>,
     },
+    #[error("cannot read the log of the box: {0}")]
+    Log(String),
     #[error("the run {run} has no log: its Job is gone")]
     JobGone { run: RunName },
     #[error("task {task} still runs on the cluster: {}; wait until it ends", jobs.join(", "))]
@@ -194,13 +195,11 @@ impl Runs {
         limit: i64,
     ) -> Result<Vec<RunState>, RunsError> {
         projects::require_member(db, user, project).await?;
-        let (runs, jobs) = try_join!(
-            list_runs_of_task(db, project, task, after, limit),
-            self.list_jobs_of_task(project, task)
-        )?;
+        let runs = list_runs_of_task(db, project, task, after, limit).await?;
+        let jobs = self.list_jobs_of_task(project, task).await?;
         let states = runs.into_iter().map(|run| {
             let job = find_job_in(&jobs, &run);
-            self.run_state(run, job)
+            self.run_state(db, run, job)
         });
         try_join_all(states).await
     }
@@ -213,7 +212,7 @@ impl Runs {
     ) -> Result<RunState, RunsError> {
         let run = find_run_for_member(db, user, name).await?;
         let job = self.find_job(&run).await?;
-        self.run_state(run, job.as_ref()).await
+        self.run_state(db, run, job.as_ref()).await
     }
 
     pub async fn open_log(
@@ -233,57 +232,6 @@ impl Runs {
             Err(ClusterError::NoPod(_)) => Err(RunsError::JobGone { run: run.name }),
             other => Ok(other?),
         }
-    }
-
-    pub async fn run_credential(
-        &self,
-        db: &Db,
-        placeholder: &str,
-        host: &str,
-    ) -> Result<String, RunsError> {
-        let none = || RunsError::NoRunCredential {
-            host: host.to_owned(),
-        };
-        if !GITHUB_HOSTS.contains(&host) {
-            return Err(none());
-        }
-        let open: Vec<JobState> = self
-            .cluster
-            .list_jobs(TENPORT_JOBS)
-            .await?
-            .into_iter()
-            .filter(|job| job.phase == JobPhase::Running)
-            .collect();
-        self.forget_tokens_of_ended_jobs(&open);
-        let job = open
-            .iter()
-            .find(|job| self.run_credential_key.placeholder(&job.uid) == placeholder)
-            .ok_or_else(none)?;
-        let now = OffsetDateTime::now_utc();
-        if let Some(token) = self.reusable_token(&job.uid, now) {
-            return Ok(token);
-        }
-        let project = job
-            .labels
-            .get(PROJECT_ID_LABEL)
-            .and_then(|id| ProjectId::parse(id).ok())
-            .ok_or_else(none)?;
-        let project = projects::find(db, &project).await?.ok_or_else(none)?;
-        let token = self.github.repo_token(&project.repo, now).await?;
-        let value = token.token.clone();
-        lock(&self.repo_tokens).insert(job.uid.clone(), token);
-        Ok(value)
-    }
-
-    fn reusable_token(&self, job: &JobUid, now: OffsetDateTime) -> Option<String> {
-        lock(&self.repo_tokens)
-            .get(job)
-            .filter(|token| token.expires - now > TOKEN_REUSE_MARGIN)
-            .map(|token| token.token.clone())
-    }
-
-    fn forget_tokens_of_ended_jobs(&self, open: &[JobState]) {
-        lock(&self.repo_tokens).retain(|uid, _| open.iter().any(|job| job.uid == *uid));
     }
 
     pub async fn delete_task(
@@ -308,9 +256,17 @@ impl Runs {
 
     pub async fn stop(&self, db: &Db, user: &UserId, name: &RunName) -> Result<(), RunsError> {
         let run = find_run_for_member(db, user, name).await?;
+        let job = self.find_job(&run).await?;
+        let running = job.as_ref().is_some_and(JobState::is_running);
+        if !running {
+            self.run_state(db, run.clone(), job.as_ref()).await?;
+        }
         self.cluster
             .delete_job(&JobName::new(run.name.as_str()))
             .await?;
+        if running && run.finished.is_none() {
+            self.finish(db, run, Finish::stopped()).await?;
+        }
         Ok(())
     }
 
@@ -327,22 +283,6 @@ impl Runs {
                 reason: pod.and_then(|pod| pod.reason),
             }),
         }
-    }
-
-    async fn run_state(&self, run: Run, job: Option<&JobState>) -> Result<RunState, RunsError> {
-        let Some(job) = job else {
-            return Ok(RunState {
-                run,
-                phase: RunPhase::Unknown,
-                reason: None,
-            });
-        };
-        let pod = self.cluster.find_pod(&job.name).await?;
-        Ok(RunState {
-            run,
-            phase: job.phase.into(),
-            reason: pod.and_then(|pod| pod.reason),
-        })
     }
 
     async fn find_job(&self, run: &Run) -> Result<Option<JobState>, RunsError> {
@@ -363,7 +303,7 @@ impl Runs {
         let jobs = self.list_jobs_of_task(&project.id, task).await?;
         let running: Vec<String> = jobs
             .into_iter()
-            .filter(|job| job.phase == JobPhase::Running)
+            .filter(|job| job.is_running())
             .map(|job| job.name.as_str().to_owned())
             .collect();
         if running.is_empty() {
@@ -425,12 +365,6 @@ async fn list_runs_of_task(
     Ok(store::list_runs_of_task(&mut conn, project, task, after, limit).await?)
 }
 
-fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
 fn find_job_in<'a>(jobs: &'a [JobState], run: &Run) -> Option<&'a JobState> {
     jobs.iter()
         .find(|job| job.name.as_str() == run.name.as_str())
@@ -480,6 +414,13 @@ pub(crate) async fn apply(
 ) -> Result<(), ApplyError> {
     match event {
         RunsEvent::RunStarted(started) => store::insert_run(conn, started, stamp).await?,
+        RunsEvent::RunFinished(finished) => {
+            if !store::update_run_finish(conn, finished, stamp).await? {
+                return Err(ApplyError::Refused(
+                    "the run has finished already, or Tenport does not know it",
+                ));
+            }
+        }
     }
     Ok(())
 }
