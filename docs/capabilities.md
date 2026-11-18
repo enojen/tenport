@@ -90,7 +90,7 @@ second workflow would change the roles only.
 |---|---|
 | A user adds one or more agents in the panel, each with its kind, its account and its name | Decided |
 | A session and a run use an agent of the person who started them, never another person's | Decided |
-| A project has a default agent for each of its users. A session or a run names an agent, else it uses that default; with neither, Tenport refuses with 400 | Decided, 2026-11-18 |
+| A user's first agent is their default, and the user can make another agent the default at any time. A session or a run may name another agent of the user; else it uses the default. A user with no agent cannot start one: Tenport answers 400 | Decided, 2026-11-18 |
 | The account of an agent is the Secret `agent-<agent id>` in namespace `tenbox`, and a Job reads the Secret of its agent. Today every Job reads the one Secret `claude-credentials` | Decided, 2026-11-18 |
 | Phase 1, one user: the claude.ai login, as today, and chat with Remote Control | Proposed |
 | Phase 2, other users: each organization brings its own API key, and the chat moves into Tenface with the Agent SDK | Proposed |
