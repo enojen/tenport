@@ -141,6 +141,14 @@ impl Cluster for FakeCluster {
         ready(Ok(states)).boxed()
     }
 
+    fn find_job<'a>(
+        &'a self,
+        job: &'a JobName,
+    ) -> BoxFuture<'a, Result<Option<JobState>, ClusterError>> {
+        let state = self.lock().get(job).map(|fake| job_state(job, fake));
+        ready(Ok(state)).boxed()
+    }
+
     fn find_pod<'a>(
         &'a self,
         job: &'a JobName,

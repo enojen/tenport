@@ -241,8 +241,8 @@ impl Runs {
     }
 
     async fn find_job(&self, run: &Run) -> Result<Option<JobState>, RunsError> {
-        let jobs = self.list_jobs_of_task(&run.project, &run.task).await?;
-        Ok(find_job_in(&jobs, run).cloned())
+        let job = JobName::new(run.name.as_str());
+        Ok(self.cluster.find_job(&job).await?)
     }
 
     async fn list_jobs_of_task(

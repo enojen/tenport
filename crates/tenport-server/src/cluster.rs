@@ -25,6 +25,10 @@ pub trait Cluster: Send + Sync {
         &'a self,
         labels: &'a [(&'a str, &'a str)],
     ) -> BoxFuture<'a, Result<Vec<JobState>, ClusterError>>;
+    fn find_job<'a>(
+        &'a self,
+        job: &'a JobName,
+    ) -> BoxFuture<'a, Result<Option<JobState>, ClusterError>>;
     fn find_pod<'a>(
         &'a self,
         job: &'a JobName,

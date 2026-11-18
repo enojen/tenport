@@ -106,6 +106,21 @@ impl Cluster for KubeCluster {
         .boxed()
     }
 
+    fn find_job<'a>(
+        &'a self,
+        job: &'a JobName,
+    ) -> BoxFuture<'a, Result<Option<JobState>, ClusterError>> {
+        async move {
+            let found = self
+                .jobs
+                .get_opt(job.as_str())
+                .await
+                .map_err(ClusterError::Kube)?;
+            Ok(found.and_then(job_state))
+        }
+        .boxed()
+    }
+
     fn find_pod<'a>(
         &'a self,
         job: &'a JobName,
