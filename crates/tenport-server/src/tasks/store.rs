@@ -3,7 +3,7 @@ use sqlx::SqliteConnection;
 use super::model::{TaskClosed, TaskDeleted, TaskStarted};
 use crate::events::Stamp;
 
-pub async fn open_task(
+pub async fn insert_task(
     conn: &mut SqliteConnection,
     started: &TaskStarted,
     stamp: &Stamp<'_>,
@@ -25,7 +25,7 @@ pub async fn open_task(
     Ok(done.rows_affected() == 1)
 }
 
-pub async fn close_task(
+pub async fn update_task_closed(
     conn: &mut SqliteConnection,
     closed: &TaskClosed,
     stamp: &Stamp<'_>,
