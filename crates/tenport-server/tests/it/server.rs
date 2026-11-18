@@ -78,9 +78,9 @@ impl TestServer {
 }
 
 impl TestServer {
-    pub async fn register(&self, org: &str, github: &str, role: Role) -> Token {
+    pub async fn register(&self, organization: &str, github: &str, role: Role) -> Token {
         let registration = Registration {
-            org: Name::parse(org).unwrap(),
+            organization: Name::parse(organization).unwrap(),
             user: NewUser {
                 name: Name::parse(github).unwrap(),
                 email: None,

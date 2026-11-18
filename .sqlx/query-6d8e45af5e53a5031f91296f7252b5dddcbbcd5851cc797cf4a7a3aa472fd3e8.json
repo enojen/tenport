@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "select id as \"id: OrgId\" from organizations where name = ?",
+  "query": "select id as \"id: OrganizationId\" from organizations where name = ?",
   "describe": {
     "columns": [
       {
-        "name": "id: OrgId",
+        "name": "id: OrganizationId",
         "ordinal": 0,
         "type_info": "Text",
         "origin": {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "2e37163482f5d9634181bbd02722fd6cb77ee11b83a53f5409373236d16230fa"
+  "hash": "6d8e45af5e53a5031f91296f7252b5dddcbbcd5851cc797cf4a7a3aa472fd3e8"
 }

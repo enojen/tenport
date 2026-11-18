@@ -2,9 +2,9 @@ use super::*;
 use crate::db;
 use crate::name::Name;
 
-fn registration(org: &str, github: &str) -> Registration {
+fn registration(organization: &str, github: &str) -> Registration {
     Registration {
-        org: Name::parse(org).unwrap(),
+        organization: Name::parse(organization).unwrap(),
         user: NewUser {
             name: Name::parse("Enes").unwrap(),
             email: None,
@@ -22,7 +22,7 @@ async fn registers_a_user_with_an_organization_and_a_token() {
         .await
         .unwrap();
     assert!(registered.user.as_str().starts_with("u-"));
-    assert!(registered.org.as_str().starts_with("o-"));
+    assert!(registered.organization.as_str().starts_with("o-"));
     let user = authenticate(&db, &registered.token).await.unwrap().unwrap();
     assert_eq!(user.id, registered.user);
     assert_eq!(user.github.as_str(), "enojen");
@@ -30,8 +30,8 @@ async fn registers_a_user_with_an_organization_and_a_token() {
     assert_eq!(
         memberships,
         vec![Membership {
-            org: registered.org,
-            org_name: Name::parse("Wegobi").unwrap(),
+            organization: registered.organization,
+            organization_name: Name::parse("Wegobi").unwrap(),
             role: Role::Admin,
         }]
     );
@@ -46,7 +46,7 @@ async fn a_second_user_joins_the_organization_that_exists() {
     let second = register(&db, Actor::Server, registration("Wegobi", "ali"))
         .await
         .unwrap();
-    assert_eq!(first.org, second.org);
+    assert_eq!(first.organization, second.organization);
 }
 
 #[tokio::test]

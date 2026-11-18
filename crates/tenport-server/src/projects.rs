@@ -6,7 +6,7 @@ mod tests;
 
 use sqlx::SqliteConnection;
 
-use crate::accounts::{self, AccountsError, OrgId, Role, UserId};
+use crate::accounts::{self, AccountsError, OrganizationId, Role, UserId};
 use crate::cluster::{Cluster, ClusterError};
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
@@ -19,8 +19,8 @@ pub use model::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectsError {
-    #[error("only an admin of the organization {org} adds a project to it")]
-    NotAdmin { org: OrgId },
+    #[error("only an admin of the organization {organization} adds a project to it")]
+    NotAdmin { organization: OrganizationId },
     #[error("only a member of the organization of the project {project} uses it")]
     NotMember { project: ProjectId },
     #[error("only an admin of the organization of the project {project} writes its secrets")]
@@ -42,16 +42,16 @@ pub enum ProjectsError {
 
 #[derive(Debug, Clone)]
 pub struct NewProject {
-    pub org: OrgId,
+    pub organization: OrganizationId,
     pub name: Name,
     pub repo: Repo,
 }
 
 pub async fn add(db: &Db, user: &UserId, project: NewProject) -> Result<Project, ProjectsError> {
-    require_admin(db, user, &project.org).await?;
+    require_admin(db, user, &project.organization).await?;
     let added = ProjectAdded {
         id: ProjectId::random(),
-        org: project.org,
+        organization: project.organization,
         name: project.name,
         repo: project.repo,
     };
@@ -189,7 +189,7 @@ async fn require_project_admin(
     project: &ProjectId,
 ) -> Result<(), ProjectsError> {
     let found = require_member(db, user, project).await?;
-    match require_admin(db, user, &found.org).await {
+    match require_admin(db, user, &found.organization).await {
         Err(ProjectsError::NotAdmin { .. }) => Err(ProjectsError::NotProjectAdmin {
             project: project.clone(),
         }),
@@ -197,14 +197,20 @@ async fn require_project_admin(
     }
 }
 
-async fn require_admin(db: &Db, user: &UserId, org: &OrgId) -> Result<(), ProjectsError> {
+async fn require_admin(
+    db: &Db,
+    user: &UserId,
+    organization: &OrganizationId,
+) -> Result<(), ProjectsError> {
     let memberships = accounts::memberships(db, user).await?;
-    let is_admin = memberships
-        .iter()
-        .any(|membership| membership.org == *org && membership.role == Role::Admin);
+    let is_admin = memberships.iter().any(|membership| {
+        membership.organization == *organization && membership.role == Role::Admin
+    });
     if is_admin {
         Ok(())
     } else {
-        Err(ProjectsError::NotAdmin { org: org.clone() })
+        Err(ProjectsError::NotAdmin {
+            organization: organization.clone(),
+        })
     }
 }

@@ -1,8 +1,8 @@
 use sqlx::SqliteConnection;
 
 use super::model::{
-    MemberAdded, Membership, OrgId, OrganizationAdded, TokenAdded, TokenHash, User, UserAdded,
-    UserId,
+    MemberAdded, Membership, OrganizationAdded, OrganizationId, TokenAdded, TokenHash, User,
+    UserAdded, UserId,
 };
 use crate::events::Stamp;
 use crate::name::Name;
@@ -50,9 +50,9 @@ pub async fn insert_membership(
     stamp: &Stamp<'_>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        "insert into memberships (org_id, user_id, role, created_at, created_by)
+        "insert into memberships (organization_id, user_id, role, created_at, created_by)
          values (?, ?, ?, ?, ?)",
-        added.org,
+        added.organization,
         added.user,
         added.role,
         stamp.at,
@@ -86,9 +86,9 @@ pub async fn insert_token(
 pub async fn find_organization_id_by_name(
     conn: &mut SqliteConnection,
     name: &Name,
-) -> Result<Option<OrgId>, sqlx::Error> {
+) -> Result<Option<OrganizationId>, sqlx::Error> {
     sqlx::query_scalar!(
-        r#"select id as "id: OrgId" from organizations where name = ?"#,
+        r#"select id as "id: OrganizationId" from organizations where name = ?"#,
         name,
     )
     .fetch_optional(conn)
@@ -117,8 +117,8 @@ pub async fn list_memberships_of_user(
 ) -> Result<Vec<Membership>, sqlx::Error> {
     sqlx::query_as!(
         Membership,
-        r#"select organizations.id as "org: _", organizations.name as "org_name: _", memberships.role as "role: _"
-           from memberships join organizations on organizations.id = memberships.org_id
+        r#"select organizations.id as "organization: _", organizations.name as "organization_name: _", memberships.role as "role: _"
+           from memberships join organizations on organizations.id = memberships.organization_id
            where memberships.user_id = ?
            order by organizations.name"#,
         user,

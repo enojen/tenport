@@ -12,8 +12,8 @@ use crate::name::Name;
 
 pub use model::{
     AccountsEvent, Email, EmailError, GithubLogin, GithubLoginError, MemberAdded, Membership,
-    OrgId, OrganizationAdded, Role, Token, TokenAdded, TokenError, TokenHash, TokenId, User,
-    UserAdded, UserId,
+    OrganizationAdded, OrganizationId, Role, Token, TokenAdded, TokenError, TokenHash, TokenId,
+    User, UserAdded, UserId,
 };
 
 const UNIQUE_GITHUB: &str = "users.github";
@@ -37,7 +37,7 @@ pub struct NewUser {
 
 #[derive(Debug, Clone)]
 pub struct Registration {
-    pub org: Name,
+    pub organization: Name,
     pub user: NewUser,
     pub role: Role,
     pub token_name: Name,
@@ -45,7 +45,7 @@ pub struct Registration {
 
 #[derive(Debug)]
 pub struct Registered {
-    pub org: OrgId,
+    pub organization: OrganizationId,
     pub user: UserId,
     pub token: Token,
 }
@@ -56,12 +56,13 @@ pub async fn register(
     registration: Registration,
 ) -> Result<Registered, AccountsError> {
     let mut events = Vec::new();
-    let org = find_or_new_organization(db, &registration.org, &mut events).await?;
+    let organization =
+        find_or_new_organization(db, &registration.organization, &mut events).await?;
     let user = UserId::random();
     let token = Token::random();
     events.push(user_added(&user, &registration.user));
     events.push(Event::Accounts(AccountsEvent::MemberAdded(MemberAdded {
-        org: org.clone(),
+        organization: organization.clone(),
         user: user.clone(),
         role: registration.role,
     })));
@@ -74,7 +75,11 @@ pub async fn register(
     events::append_all(db, actor, events)
         .await
         .map_err(|error| registration_error(error, &registration.user.github))?;
-    Ok(Registered { org, user, token })
+    Ok(Registered {
+        organization,
+        user,
+        token,
+    })
 }
 
 pub async fn authenticate(db: &Db, token: &Token) -> Result<Option<User>, AccountsError> {
@@ -107,12 +112,12 @@ async fn find_or_new_organization(
     db: &Db,
     name: &Name,
     events: &mut Vec<Event>,
-) -> Result<OrgId, AccountsError> {
+) -> Result<OrganizationId, AccountsError> {
     let mut conn = db.acquire().await?;
     if let Some(id) = store::find_organization_id_by_name(&mut conn, name).await? {
         return Ok(id);
     }
-    let id = OrgId::random();
+    let id = OrganizationId::random();
     events.push(Event::Accounts(AccountsEvent::OrganizationAdded(
         OrganizationAdded {
             id: id.clone(),
@@ -142,7 +147,7 @@ fn registration_error(error: EventsError, github: &GithubLogin) -> AccountsError
 }
 
 #[cfg(test)]
-pub(crate) async fn organization_id(db: &Db, name: &str) -> Option<OrgId> {
+pub(crate) async fn organization_id(db: &Db, name: &str) -> Option<OrganizationId> {
     let mut conn = db.acquire().await.unwrap();
     let name = Name::parse(name).unwrap();
     store::find_organization_id_by_name(&mut conn, &name)

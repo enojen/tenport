@@ -1,13 +1,13 @@
 use serde_json::Value;
 
 use super::*;
-use crate::accounts::{AccountsEvent, OrgId, OrganizationAdded};
+use crate::accounts::{AccountsEvent, OrganizationAdded, OrganizationId};
 use crate::db;
 use crate::name::Name;
 
 fn organization_added(name: &str) -> Event {
     Event::Accounts(AccountsEvent::OrganizationAdded(OrganizationAdded {
-        id: OrgId::random(),
+        id: OrganizationId::random(),
         name: Name::parse(name).unwrap(),
     }))
 }

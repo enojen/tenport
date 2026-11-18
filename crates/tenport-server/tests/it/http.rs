@@ -151,18 +151,18 @@ async fn a_user_opens_five_followed_logs_at_most() {
     assert_eq!(problem(refused).await["code"], "too-many-log-streams");
 }
 
-async fn add_project(server: &TestServer, token: &Token, org: &str, name: &str) {
+async fn add_project(server: &TestServer, token: &Token, organization: &str, name: &str) {
     let response = reqwest::Client::new()
         .post(server.url("/projects"))
         .bearer_auth(token.expose())
-        .json(&json!({ "org": org, "name": name, "repo": "enojen/tenport" }))
+        .json(&json!({ "organization": organization, "name": name, "repo": "enojen/tenport" }))
         .send()
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
 }
 
-async fn org_of(server: &TestServer, token: &Token) -> String {
+async fn organization_of(server: &TestServer, token: &Token) -> String {
     let me: Value = get(server, token, "/me").await.json().await.unwrap();
     me["organizations"][0]["id"].as_str().unwrap().to_owned()
 }
@@ -187,9 +187,9 @@ fn names(list: &Value) -> Vec<&str> {
 async fn the_projects_come_in_pages_with_a_link_to_the_next() {
     let server = TestServer::start().await;
     let token = server.register("Wegobi", "enojen", Role::Admin).await;
-    let org = org_of(&server, &token).await;
+    let organization = organization_of(&server, &token).await;
     for name in ["Alpha", "Beta", "Gamma"] {
-        add_project(&server, &token, &org, name).await;
+        add_project(&server, &token, &organization, name).await;
     }
     let first = get(&server, &token, "/projects?limit=2").await;
     let next = next_link(&first).unwrap();
@@ -205,8 +205,8 @@ async fn the_projects_come_in_pages_with_a_link_to_the_next() {
 async fn a_list_without_limit_is_one_page_of_fifty() {
     let server = TestServer::start().await;
     let token = server.register("Wegobi", "enojen", Role::Admin).await;
-    let org = org_of(&server, &token).await;
-    add_project(&server, &token, &org, "Alpha").await;
+    let organization = organization_of(&server, &token).await;
+    add_project(&server, &token, &organization, "Alpha").await;
     let response = get(&server, &token, "/projects").await;
     assert!(next_link(&response).is_none());
     let list: Value = response.json().await.unwrap();

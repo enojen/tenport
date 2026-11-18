@@ -155,7 +155,7 @@
           "name": {
             "type": "string"
           },
-          "org": {
+          "organization": {
             "type": "string"
           },
           "repo": {
@@ -164,7 +164,7 @@
           }
         },
         "required": [
-          "org",
+          "organization",
           "name",
           "repo"
         ],
@@ -364,7 +364,7 @@
           "name": {
             "type": "string"
           },
-          "org": {
+          "organization": {
             "type": "string"
           },
           "repo": {
@@ -373,7 +373,7 @@
         },
         "required": [
           "id",
-          "org",
+          "organization",
           "name",
           "repo"
         ],

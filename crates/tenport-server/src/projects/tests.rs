@@ -2,9 +2,9 @@ use super::*;
 use crate::db;
 use crate::fixtures::register;
 
-fn new_project(org: &OrgId, name: &str) -> NewProject {
+fn new_project(organization: &OrganizationId, name: &str) -> NewProject {
     NewProject {
-        org: org.clone(),
+        organization: organization.clone(),
         name: Name::parse(name).unwrap(),
         repo: Repo::parse("enojen/tenport").unwrap(),
     }
@@ -14,9 +14,13 @@ fn new_project(org: &OrgId, name: &str) -> NewProject {
 async fn an_admin_adds_a_project_and_sees_it() {
     let (db, _dir) = db::temp().await;
     let admin = register(&db, "Wegobi", "enojen", Role::Admin).await;
-    let added = add(&db, &admin.user, new_project(&admin.org, "Tenport"))
-        .await
-        .unwrap();
+    let added = add(
+        &db,
+        &admin.user,
+        new_project(&admin.organization, "Tenport"),
+    )
+    .await
+    .unwrap();
     assert_eq!(
         list_of_user(&db, &admin.user, None, 50).await.unwrap(),
         vec![added]
@@ -28,11 +32,15 @@ async fn a_member_cannot_add_a_project() {
     let (db, _dir) = db::temp().await;
     let admin = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let member = register(&db, "Wegobi", "ali", Role::Member).await;
-    let error = add(&db, &member.user, new_project(&admin.org, "Tenport"))
-        .await
-        .unwrap_err();
+    let error = add(
+        &db,
+        &member.user,
+        new_project(&admin.organization, "Tenport"),
+    )
+    .await
+    .unwrap_err();
     assert!(
-        matches!(&error, ProjectsError::NotAdmin { org } if *org == admin.org),
+        matches!(&error, ProjectsError::NotAdmin { organization } if *organization == admin.organization),
         "{error}"
     );
     assert!(
@@ -48,10 +56,14 @@ async fn a_user_sees_only_the_projects_of_their_organizations() {
     let (db, _dir) = db::temp().await;
     let wegobi = register(&db, "Wegobi", "enojen", Role::Admin).await;
     let other = register(&db, "Other", "ali", Role::Admin).await;
-    add(&db, &wegobi.user, new_project(&wegobi.org, "Tenport"))
-        .await
-        .unwrap();
-    let theirs = add(&db, &other.user, new_project(&other.org, "Shop"))
+    add(
+        &db,
+        &wegobi.user,
+        new_project(&wegobi.organization, "Tenport"),
+    )
+    .await
+    .unwrap();
+    let theirs = add(&db, &other.user, new_project(&other.organization, "Shop"))
         .await
         .unwrap();
     assert_eq!(

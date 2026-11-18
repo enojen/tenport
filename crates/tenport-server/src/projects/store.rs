@@ -10,10 +10,10 @@ pub async fn insert_project(
     stamp: &Stamp<'_>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        "insert into projects (id, org_id, name, repo, created_at, created_by)
+        "insert into projects (id, organization_id, name, repo, created_at, created_by)
          values (?, ?, ?, ?, ?, ?)",
         added.id,
-        added.org,
+        added.organization,
         added.name,
         added.repo,
         stamp.at,
@@ -32,9 +32,9 @@ pub async fn list_projects_of_user(
 ) -> Result<Vec<Project>, sqlx::Error> {
     sqlx::query_as!(
         Project,
-        r#"select projects.id as "id: _", projects.org_id as "org: _", projects.name as "name: _",
+        r#"select projects.id as "id: _", projects.organization_id as "organization: _", projects.name as "name: _",
                   projects.repo as "repo: _"
-           from projects join memberships on memberships.org_id = projects.org_id
+           from projects join memberships on memberships.organization_id = projects.organization_id
            where memberships.user_id = ?
              and (? is null
                   or (projects.name, projects.id) > (select name, id from projects where id = ?))
@@ -55,7 +55,7 @@ pub async fn find_project(
 ) -> Result<Option<Project>, sqlx::Error> {
     sqlx::query_as!(
         Project,
-        r#"select id as "id: _", org_id as "org: _", name as "name: _", repo as "repo: _"
+        r#"select id as "id: _", organization_id as "organization: _", name as "name: _", repo as "repo: _"
            from projects where id = ?"#,
         project,
     )
@@ -70,9 +70,9 @@ pub async fn find_project_for_member(
 ) -> Result<Option<Project>, sqlx::Error> {
     sqlx::query_as!(
         Project,
-        r#"select projects.id as "id: _", projects.org_id as "org: _", projects.name as "name: _",
+        r#"select projects.id as "id: _", projects.organization_id as "organization: _", projects.name as "name: _",
                   projects.repo as "repo: _"
-           from projects join memberships on memberships.org_id = projects.org_id
+           from projects join memberships on memberships.organization_id = projects.organization_id
            where projects.id = ? and memberships.user_id = ?"#,
         project,
         user,

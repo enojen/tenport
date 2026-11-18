@@ -10,7 +10,7 @@ use super::error::{
 };
 use super::extract::{Json, Path, Query};
 use super::page::{Page, PageQuery, Paged};
-use crate::accounts::OrgId;
+use crate::accounts::OrganizationId;
 use crate::name::Name;
 use crate::projects::{self, ProjectId, ProjectSecret, Repo, SecretState, SecretValue};
 use time::OffsetDateTime;
@@ -18,7 +18,7 @@ use time::OffsetDateTime;
 #[derive(Deserialize, ToSchema)]
 pub struct NewProject {
     #[schema(value_type = String)]
-    org: OrgId,
+    organization: OrganizationId,
     #[schema(value_type = String)]
     name: Name,
     #[schema(value_type = String, example = "enojen/tenport")]
@@ -28,7 +28,7 @@ pub struct NewProject {
 #[derive(Serialize, ToSchema)]
 pub struct Project {
     id: String,
-    org: String,
+    organization: String,
     name: String,
     repo: String,
 }
@@ -53,7 +53,7 @@ pub async fn add_project(
     Json(body): Json<NewProject>,
 ) -> Result<(StatusCode, Json<Project>), HttpError> {
     let new = projects::NewProject {
-        org: body.org,
+        organization: body.organization,
         name: body.name,
         repo: body.repo,
     };
@@ -96,7 +96,7 @@ impl From<projects::Project> for Project {
     fn from(project: projects::Project) -> Self {
         Self {
             id: project.id.to_string(),
-            org: project.org.to_string(),
+            organization: project.organization.to_string(),
             name: project.name.into(),
             repo: project.repo.into(),
         }

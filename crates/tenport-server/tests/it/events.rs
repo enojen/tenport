@@ -19,7 +19,7 @@ async fn add_project(server: &TestServer, token: &Token) -> String {
         .post(server.url("/projects"))
         .bearer_auth(token.expose())
         .json(&json!({
-            "org": me["organizations"][0]["id"],
+            "organization": me["organizations"][0]["id"],
             "name": "Tenport",
             "repo": "enojen/tenport"
         }))

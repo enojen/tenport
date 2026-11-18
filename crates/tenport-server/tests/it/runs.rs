@@ -31,7 +31,7 @@ async fn project_named(server: &TestServer, token: &Token, name: &str) -> String
         .post(server.url("/projects"))
         .bearer_auth(token.expose())
         .json(
-            &json!({ "org": me["organizations"][0]["id"], "name": name, "repo": "enojen/tenport" }),
+            &json!({ "organization": me["organizations"][0]["id"], "name": name, "repo": "enojen/tenport" }),
         )
         .send()
         .await

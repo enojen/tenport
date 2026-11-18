@@ -19,9 +19,9 @@ fn no_arguments_serve() {
 #[test]
 fn user_add_reads_every_flag() {
     let added = registration(
-        "user add --name Ayse --github Ayse-K --org demo --email a@x.dev --role admin",
+        "user add --name Ayse --github Ayse-K --organization demo --email a@x.dev --role admin",
     );
-    assert_eq!(added.org.as_str(), "demo");
+    assert_eq!(added.organization.as_str(), "demo");
     assert_eq!(added.user.name.as_str(), "Ayse");
     assert_eq!(added.user.github.as_str(), "ayse-k");
     assert_eq!(
@@ -38,7 +38,7 @@ fn user_add_reads_every_flag() {
 
 #[test]
 fn a_user_is_a_member_with_no_email_by_default() {
-    let added = registration("user add --name Can --github can --org demo");
+    let added = registration("user add --name Can --github can --organization demo");
     assert_eq!(added.role, Role::Member);
     assert_eq!(added.user.email, None);
 }
@@ -47,23 +47,23 @@ fn a_user_is_a_member_with_no_email_by_default() {
 fn user_add_needs_a_name_a_login_and_an_org() {
     let missing = |text: &str| parse(&args(text)).err();
     assert_eq!(
-        missing("user add --github can --org demo"),
+        missing("user add --github can --organization demo"),
         Some(CommandError::Missing("--name"))
     );
     assert_eq!(
-        missing("user add --name Can --org demo"),
+        missing("user add --name Can --organization demo"),
         Some(CommandError::Missing("--github"))
     );
     assert_eq!(
         missing("user add --name Can --github can"),
-        Some(CommandError::Missing("--org"))
+        Some(CommandError::Missing("--organization"))
     );
 }
 
 #[test]
 fn a_wrong_flag_or_value_is_refused() {
     let error = |text: &str| parse(&args(text)).err().map(|error| error.to_string());
-    let base = "user add --name Can --github can --org demo";
+    let base = "user add --name Can --github can --organization demo";
     assert_eq!(
         error(&format!("{base} --role owner")).as_deref(),
         Some("--role: admin or member")
@@ -73,15 +73,15 @@ fn a_wrong_flag_or_value_is_refused() {
         Some("unknown flag: --type")
     );
     assert_eq!(
-        error(&format!("{base} --org other")).as_deref(),
-        Some("--org is given twice")
+        error(&format!("{base} --organization other")).as_deref(),
+        Some("--organization is given twice")
     );
     assert_eq!(
         error(&format!("{base} --email")).as_deref(),
         Some("--email needs a value")
     );
     assert_eq!(
-        error("user add --name Can --github -can --org demo").as_deref(),
+        error("user add --name Can --github -can --organization demo").as_deref(),
         Some("--github: a GitHub login has 1 to 39 letters, digits and single hyphens inside")
     );
     assert_eq!(

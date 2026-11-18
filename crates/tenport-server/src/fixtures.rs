@@ -4,9 +4,9 @@ use crate::events::Actor;
 use crate::name::Name;
 use crate::projects::{self, NewProject, ProjectId, Repo};
 
-pub async fn register(db: &Db, org: &str, github: &str, role: Role) -> Registered {
+pub async fn register(db: &Db, organization: &str, github: &str, role: Role) -> Registered {
     let registration = Registration {
-        org: Name::parse(org).unwrap(),
+        organization: Name::parse(organization).unwrap(),
         user: NewUser {
             name: Name::parse(github).unwrap(),
             email: None,
@@ -22,7 +22,7 @@ pub async fn register(db: &Db, org: &str, github: &str, role: Role) -> Registere
 
 pub async fn project_of(db: &Db, owner: &Registered) -> ProjectId {
     let new = NewProject {
-        org: owner.org.clone(),
+        organization: owner.organization.clone(),
         name: Name::parse("Tenport").unwrap(),
         repo: Repo::parse("enojen/tenport").unwrap(),
     };
