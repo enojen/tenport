@@ -2,7 +2,7 @@ use sqlx::SqliteConnection;
 use time::OffsetDateTime;
 
 use super::command::CommandName;
-use super::model::{ClassName, EndPhase, Run, RunEnd, RunFinished, RunName, RunStarted};
+use super::model::{ClassName, Finish, FinishedPhase, Run, RunFinished, RunName, RunStarted};
 use crate::events::Stamp;
 use crate::projects::ProjectId;
 use crate::tasks::TaskId;
@@ -14,7 +14,7 @@ struct RunRow {
     command: CommandName,
     class: ClassName,
     created: OffsetDateTime,
-    phase: Option<EndPhase>,
+    phase: Option<FinishedPhase>,
     reason: Option<String>,
     exit_code: Option<i32>,
     oom_kill: Option<i64>,
@@ -23,8 +23,8 @@ struct RunRow {
 
 impl RunRow {
     fn into_run(self) -> Result<Run, sqlx::Error> {
-        let end = match self.phase {
-            Some(phase) => Some(RunEnd {
+        let finished = match self.phase {
+            Some(phase) => Some(Finish {
                 phase,
                 reason: self.reason,
                 exit_code: self.exit_code,
@@ -40,7 +40,7 @@ impl RunRow {
             command: self.command,
             class: self.class,
             created: self.created,
-            end,
+            finished,
         })
     }
 }
@@ -49,10 +49,6 @@ fn parse_output(text: Option<&str>) -> Result<Option<serde_json::Value>, sqlx::E
     text.map(serde_json::from_str)
         .transpose()
         .map_err(|error| sqlx::Error::Decode(Box::new(error)))
-}
-
-fn into_runs(rows: Vec<RunRow>) -> Result<Vec<Run>, sqlx::Error> {
-    rows.into_iter().map(RunRow::into_run).collect()
 }
 
 pub async fn insert_run(
@@ -77,22 +73,22 @@ pub async fn insert_run(
     Ok(())
 }
 
-pub async fn update_run_end(
+pub async fn update_run_finish(
     conn: &mut SqliteConnection,
     finished: &RunFinished,
     stamp: &Stamp<'_>,
 ) -> Result<bool, sqlx::Error> {
-    let end = &finished.end;
-    let output = end.output.as_ref().map(serde_json::Value::to_string);
-    let oom_kill = end.oom_kill.and_then(|count| i64::try_from(count).ok());
+    let finish = &finished.finish;
+    let output = finish.output.as_ref().map(serde_json::Value::to_string);
+    let oom_kill = finish.oom_kill.and_then(|count| i64::try_from(count).ok());
     let updated = sqlx::query!(
         "update runs set finished_at = ?, phase = ?, reason = ?, exit_code = ?, oom_kill = ?,
                          output = ?
          where name = ? and finished_at is null",
         stamp.at,
-        end.phase,
-        end.reason,
-        end.exit_code,
+        finish.phase,
+        finish.reason,
+        finish.exit_code,
         oom_kill,
         output,
         finished.run,
@@ -102,21 +98,59 @@ pub async fn update_run_end(
     Ok(updated.rows_affected() == 1)
 }
 
-pub async fn find_run(
+#[derive(Default)]
+struct RunFilter<'a> {
+    name: Option<&'a RunName>,
+    task: Option<(&'a ProjectId, &'a TaskId)>,
+    unfinished: bool,
+    after: Option<&'a RunName>,
+    limit: Option<i64>,
+}
+
+async fn select_runs(
     conn: &mut SqliteConnection,
-    name: &RunName,
-) -> Result<Option<Run>, sqlx::Error> {
-    let row = sqlx::query_as!(
+    filter: RunFilter<'_>,
+) -> Result<Vec<Run>, sqlx::Error> {
+    let project = filter.task.map(|(project, _)| project);
+    let task = filter.task.map(|(_, task)| task);
+    let limit = filter.limit.unwrap_or(-1);
+    let rows = sqlx::query_as!(
         RunRow,
         r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
                   command as "command: _", class as "class: _", created_at as "created: _",
                   phase as "phase: _", reason, exit_code as "exit_code: _", oom_kill, output
-           from runs where name = ?"#,
-        name,
+           from runs
+           where (? is null or name = ?)
+             and (? is null or (project_id = ? and task_id = ?))
+             and (not ? or finished_at is null)
+             and (? is null
+                  or (created_at, name) > (select created_at, name from runs where name = ?))
+           order by created_at, name
+           limit ?"#,
+        filter.name,
+        filter.name,
+        project,
+        project,
+        task,
+        filter.unfinished,
+        filter.after,
+        filter.after,
+        limit,
     )
-    .fetch_optional(conn)
+    .fetch_all(conn)
     .await?;
-    row.map(RunRow::into_run).transpose()
+    rows.into_iter().map(RunRow::into_run).collect()
+}
+
+pub async fn find_run(
+    conn: &mut SqliteConnection,
+    name: &RunName,
+) -> Result<Option<Run>, sqlx::Error> {
+    let filter = RunFilter {
+        name: Some(name),
+        ..RunFilter::default()
+    };
+    Ok(select_runs(conn, filter).await?.pop())
 }
 
 pub async fn list_runs_of_task(
@@ -126,40 +160,21 @@ pub async fn list_runs_of_task(
     after: Option<&RunName>,
     limit: i64,
 ) -> Result<Vec<Run>, sqlx::Error> {
-    let rows = sqlx::query_as!(
-        RunRow,
-        r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
-                  command as "command: _", class as "class: _", created_at as "created: _",
-                  phase as "phase: _", reason, exit_code as "exit_code: _", oom_kill, output
-           from runs
-           where project_id = ? and task_id = ?
-             and (? is null
-                  or (created_at, name) > (select created_at, name from runs where name = ?))
-           order by created_at, name
-           limit ?"#,
-        project,
-        task,
+    let filter = RunFilter {
+        task: Some((project, task)),
         after,
-        after,
-        limit,
-    )
-    .fetch_all(conn)
-    .await?;
-    into_runs(rows)
+        limit: Some(limit),
+        ..RunFilter::default()
+    };
+    select_runs(conn, filter).await
 }
 
-pub async fn list_runs_without_end(conn: &mut SqliteConnection) -> Result<Vec<Run>, sqlx::Error> {
-    let rows = sqlx::query_as!(
-        RunRow,
-        r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
-                  command as "command: _", class as "class: _", created_at as "created: _",
-                  phase as "phase: _", reason, exit_code as "exit_code: _", oom_kill, output
-           from runs where finished_at is null
-           order by created_at, name"#,
-    )
-    .fetch_all(conn)
-    .await?;
-    into_runs(rows)
+pub async fn list_unfinished_runs(conn: &mut SqliteConnection) -> Result<Vec<Run>, sqlx::Error> {
+    let filter = RunFilter {
+        unfinished: true,
+        ..RunFilter::default()
+    };
+    select_runs(conn, filter).await
 }
 
 #[cfg(test)]

@@ -79,6 +79,12 @@ pub struct JobState {
     pub failed_reason: Option<String>,
 }
 
+impl JobState {
+    pub fn is_running(&self) -> bool {
+        self.phase == JobPhase::Running
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PodState {
     pub name: PodName,

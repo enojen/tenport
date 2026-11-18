@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use futures::future::join_all;
 
-use crate::cluster::{FakeCluster, JobName};
+use crate::cluster::{FakeCluster, JobName, JobPhase};
 use crate::db;
 
 const STARTED_TOGETHER: usize = 8;
@@ -188,14 +188,14 @@ async fn the_timer_records_an_ended_run_once_and_leaves_a_running_one() {
     let runs = runs_on(cluster.clone());
     let run = runs.start(&db, &owner.user, build(&project)).await.unwrap();
 
-    assert_eq!(runs.record_ended_runs(&db).await.unwrap(), 0);
+    assert_eq!(runs.record_finished_runs(&db).await.unwrap(), 0);
     cluster.set_phase(&JobName::new(run.name.as_str()), JobPhase::Succeeded);
-    assert_eq!(runs.record_ended_runs(&db).await.unwrap(), 1);
-    assert_eq!(runs.record_ended_runs(&db).await.unwrap(), 0);
+    assert_eq!(runs.record_finished_runs(&db).await.unwrap(), 1);
+    assert_eq!(runs.record_finished_runs(&db).await.unwrap(), 0);
 
     assert_eq!(count_run_finished(&db).await, 1);
     let recorded = find_run(&db, &run.name).await.unwrap();
-    assert_eq!(recorded.end.unwrap().phase, EndPhase::Succeeded);
+    assert_eq!(recorded.finished.unwrap().phase, FinishedPhase::Succeeded);
 }
 
 #[tokio::test]
@@ -211,10 +211,10 @@ async fn a_run_whose_job_is_gone_before_its_end_was_seen_ends_unknown() {
         .await
         .unwrap();
 
-    assert_eq!(runs.record_ended_runs(&db).await.unwrap(), 1);
+    assert_eq!(runs.record_finished_runs(&db).await.unwrap(), 1);
 
     let recorded = find_run(&db, &run.name).await.unwrap();
-    assert_eq!(recorded.end.unwrap(), RunEnd::unknown());
+    assert_eq!(recorded.finished.unwrap(), Finish::unknown());
 }
 
 #[tokio::test]
@@ -227,12 +227,12 @@ async fn a_second_end_of_a_run_is_refused_and_the_first_stays() {
     let run = runs.start(&db, &owner.user, build(&project)).await.unwrap();
     cluster.set_phase(&JobName::new(run.name.as_str()), JobPhase::Failed);
     let first = runs
-        .finish(&db, run.clone(), RunEnd::stopped())
+        .finish(&db, run.clone(), Finish::stopped())
         .await
         .unwrap();
 
     let second = runs
-        .finish(&db, run.clone(), RunEnd::unknown())
+        .finish(&db, run.clone(), Finish::unknown())
         .await
         .unwrap();
 

@@ -106,7 +106,7 @@ async fn serve() -> anyhow::Result<()> {
     let runs = Arc::new(runs);
     tokio::spawn(
         runs.clone()
-            .record_ended_runs_every(db.clone(), ENDED_RUNS_PERIOD),
+            .record_finished_runs_every(db.clone(), ENDED_RUNS_PERIOD),
     );
     let state = AppState {
         db,

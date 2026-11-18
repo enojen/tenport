@@ -137,28 +137,28 @@ pub struct RunFinished {
     pub task: TaskId,
     pub run: RunName,
     #[serde(flatten)]
-    pub end: RunEnd,
+    pub finish: Finish,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RunEnd {
-    pub phase: EndPhase,
+pub struct Finish {
+    pub phase: FinishedPhase,
     pub reason: Option<String>,
     pub exit_code: Option<i32>,
     pub oom_kill: Option<u64>,
     pub output: Option<serde_json::Value>,
 }
 
-impl RunEnd {
+impl Finish {
     pub fn unknown() -> Self {
-        Self::without_box(EndPhase::Unknown, None)
+        Self::without_box(FinishedPhase::Unknown, None)
     }
 
     pub fn stopped() -> Self {
-        Self::without_box(EndPhase::Failed, Some(STOPPED.to_owned()))
+        Self::without_box(FinishedPhase::Failed, Some(STOPPED.to_owned()))
     }
 
-    fn without_box(phase: EndPhase, reason: Option<String>) -> Self {
+    fn without_box(phase: FinishedPhase, reason: Option<String>) -> Self {
         Self {
             phase,
             reason,
@@ -172,18 +172,18 @@ impl RunEnd {
 const STOPPED: &str = "Stopped";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-pub enum EndPhase {
+pub enum FinishedPhase {
     Succeeded,
     Failed,
     Unknown,
 }
 
-impl From<EndPhase> for RunPhase {
-    fn from(phase: EndPhase) -> Self {
+impl From<FinishedPhase> for RunPhase {
+    fn from(phase: FinishedPhase) -> Self {
         match phase {
-            EndPhase::Succeeded => Self::Succeeded,
-            EndPhase::Failed => Self::Failed,
-            EndPhase::Unknown => Self::Unknown,
+            FinishedPhase::Succeeded => Self::Succeeded,
+            FinishedPhase::Failed => Self::Failed,
+            FinishedPhase::Unknown => Self::Unknown,
         }
     }
 }
@@ -196,7 +196,7 @@ pub struct Run {
     pub command: CommandName,
     pub class: ClassName,
     pub created: OffsetDateTime,
-    pub end: Option<RunEnd>,
+    pub finished: Option<Finish>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]

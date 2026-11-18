@@ -14,27 +14,7 @@ use crate::server::TestServer;
 const CREATE_TIME: Duration = Duration::from_millis(300);
 
 pub async fn project_of(server: &TestServer, token: &Token) -> String {
-    let me: Value = reqwest::Client::new()
-        .get(server.url("/me"))
-        .bearer_auth(token.expose())
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    let org = me["organizations"][0]["id"].as_str().unwrap();
-    let project: Value = reqwest::Client::new()
-        .post(server.url("/projects"))
-        .bearer_auth(token.expose())
-        .json(&json!({ "org": org, "name": "Tenport", "repo": "enojen/tenport" }))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    project["id"].as_str().unwrap().to_owned()
+    project_named(server, token, "Tenport").await
 }
 
 async fn project_named(server: &TestServer, token: &Token, name: &str) -> String {
@@ -288,11 +268,7 @@ async fn a_run_whose_job_went_before_its_end_was_seen_is_unknown() {
         .await
         .unwrap();
     assert!(server.cluster.jobs().is_empty());
-    let run: Value = get(&server, &token, &format!("/runs/{name}"))
-        .await
-        .json()
-        .await
-        .unwrap();
+    let run = run_of(&server, &token, &name).await;
     assert_eq!(run["phase"], "Unknown");
     assert_eq!(run["reason"], Value::Null);
 }
@@ -535,11 +511,7 @@ async fn an_ended_run_keeps_its_phase_reason_and_output_after_its_job_is_gone() 
     get(&server, &token, &format!("/runs/{name}")).await;
     delete(&server, &token, &format!("/runs/{name}")).await;
     assert!(server.cluster.jobs().is_empty());
-    let run: Value = get(&server, &token, &format!("/runs/{name}"))
-        .await
-        .json()
-        .await
-        .unwrap();
+    let run = run_of(&server, &token, &name).await;
     assert_eq!(run["phase"], "Failed");
     assert_eq!(run["reason"], "Completed");
     assert_eq!(run["output"], json!({ "ok": true, "task": "TEN-301" }));
@@ -644,11 +616,7 @@ async fn a_running_run_has_no_output_yet() {
     let server = TestServer::start().await;
     let token = server.register("Wegobi", "enojen", Role::Admin).await;
     let (_, name) = started_run(&server, &token).await;
-    let run: Value = get(&server, &token, &format!("/runs/{name}"))
-        .await
-        .json()
-        .await
-        .unwrap();
+    let run = run_of(&server, &token, &name).await;
     assert_eq!(run["phase"], "Running");
     assert_eq!(run["output"], Value::Null);
     assert_eq!(run["exit_code"], Value::Null);
