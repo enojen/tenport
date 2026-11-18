@@ -87,7 +87,7 @@ async fn a_second_run_of_the_task_waits_until_the_first_job_ends() {
     let first = runs.start(&db, &owner.user, build(&project)).await.unwrap();
     let busy = runs.start(&db, &owner.user, build(&project)).await;
     assert!(matches!(busy, Err(RunsError::Busy { jobs, .. }) if jobs == [first.name.to_string()]));
-    cluster.set_phase(&JobName::new(first.name.as_str()), JobPhase::Succeeded);
+    cluster.set_phase(&JobName::from(&first.name), JobPhase::Succeeded);
     let after_end = runs.start(&db, &owner.user, build(&project)).await;
     assert!(!matches!(after_end, Err(RunsError::Busy { .. })));
 }
@@ -160,7 +160,7 @@ async fn the_timer_records_an_ended_run_once_and_leaves_a_running_one() {
     let run = runs.start(&db, &owner.user, build(&project)).await.unwrap();
 
     assert_eq!(runs.record_finished_runs(&db).await.unwrap(), 0);
-    cluster.set_phase(&JobName::new(run.name.as_str()), JobPhase::Succeeded);
+    cluster.set_phase(&JobName::from(&run.name), JobPhase::Succeeded);
     assert_eq!(runs.record_finished_runs(&db).await.unwrap(), 1);
     assert_eq!(runs.record_finished_runs(&db).await.unwrap(), 0);
 
@@ -177,10 +177,7 @@ async fn a_run_whose_job_is_gone_before_its_end_was_seen_ends_unknown() {
     let cluster = Arc::new(FakeCluster::default());
     let runs = runs_on(cluster.clone());
     let run = runs.start(&db, &owner.user, build(&project)).await.unwrap();
-    cluster
-        .delete_job(&JobName::new(run.name.as_str()))
-        .await
-        .unwrap();
+    cluster.delete_job(&JobName::from(&run.name)).await.unwrap();
 
     assert_eq!(runs.record_finished_runs(&db).await.unwrap(), 1);
 
@@ -196,7 +193,7 @@ async fn a_second_end_of_a_run_is_refused_and_the_first_stays() {
     let cluster = Arc::new(FakeCluster::default());
     let runs = runs_on(cluster.clone());
     let run = runs.start(&db, &owner.user, build(&project)).await.unwrap();
-    cluster.set_phase(&JobName::new(run.name.as_str()), JobPhase::Failed);
+    cluster.set_phase(&JobName::from(&run.name), JobPhase::Failed);
     let first = runs
         .finish(&db, run.clone(), Finish::stopped())
         .await

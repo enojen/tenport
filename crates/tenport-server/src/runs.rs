@@ -216,9 +216,7 @@ impl Runs {
         if !running {
             self.run_state(db, run.clone(), job.as_ref()).await?;
         }
-        self.cluster
-            .delete_job(&JobName::new(run.name.as_str()))
-            .await?;
+        self.cluster.delete_job(&JobName::from(&run.name)).await?;
         if running && run.finished.is_none() {
             self.finish(db, run, Finish::stopped()).await?;
         }
@@ -241,7 +239,7 @@ impl Runs {
     }
 
     async fn find_job(&self, run: &Run) -> Result<Option<JobState>, RunsError> {
-        let job = JobName::new(run.name.as_str());
+        let job = JobName::from(&run.name);
         Ok(self.cluster.find_job(&job).await?)
     }
 
