@@ -13,6 +13,8 @@ use crate::accounts::UserId;
 use crate::db::Db;
 use crate::events::{self, Actor, Appended, ApplyError, Entry, Event, EventId, EventsError, Stamp};
 use crate::projects::{self, ProjectId, ProjectsError};
+use crate::runs::{Runs, RunsError};
+use crate::task_archives::{TaskArchiveBucket, TaskArchiveState, TaskArchivesError};
 
 pub use model::{TaskClosed, TaskDeleted, TaskId, TaskIdError, TaskStarted, TasksEvent};
 
@@ -22,6 +24,10 @@ pub enum TasksError {
     EventNotAllowed { kind: &'static str },
     #[error(transparent)]
     Projects(#[from] ProjectsError),
+    #[error(transparent)]
+    Runs(#[from] RunsError),
+    #[error(transparent)]
+    TaskArchives(#[from] TaskArchivesError),
     #[error(transparent)]
     Events(#[from] EventsError),
 }
@@ -37,6 +43,26 @@ pub struct Reported {
 pub struct Recorded {
     pub stored: usize,
     pub skipped: usize,
+}
+
+pub async fn delete_task(
+    db: &Db,
+    runs: &Runs,
+    task_archives: &TaskArchiveBucket,
+    user: &UserId,
+    project: &ProjectId,
+    task: &TaskId,
+) -> Result<TaskArchiveState, TasksError> {
+    let project = projects::require_member(db, user, project).await?;
+    let _idle = runs.lock_idle_task(&project, task).await?;
+    let archive = task_archives.delete(&project.id, task).await?;
+    let deleted = TaskDeleted {
+        project: project.id,
+        task: task.clone(),
+    };
+    let event = Event::Tasks(TasksEvent::TaskDeleted(deleted));
+    events::append(db, Actor::User(user.clone()), event).await?;
+    Ok(archive)
 }
 
 pub async fn record_events(

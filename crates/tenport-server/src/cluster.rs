@@ -13,6 +13,9 @@ pub use model::{
     PodState, SecretName,
 };
 
+pub const TENPORT_JOBS: &str = "app.kubernetes.io/managed-by=tenport";
+pub const PROJECT_ID_LABEL: &str = "project-id";
+
 pub trait Cluster: Send + Sync {
     fn create_job(&self, job: Job) -> BoxFuture<'_, Result<CreatedJob, ClusterError>>;
     fn list_jobs<'a>(

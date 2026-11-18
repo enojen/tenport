@@ -3,6 +3,9 @@ use std::path::Path;
 use k8s_openapi::api::core::v1::{Container, PodSpec};
 
 use super::*;
+use crate::accounts::OrgId;
+use crate::name::Name;
+use crate::projects::{ProjectId, Repo};
 
 fn template() -> RunTemplate {
     let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
@@ -159,4 +162,36 @@ async fn an_unknown_class_or_service_is_named() {
         template().job(&fields("build"), &[service("redis")]).await,
         Err(TemplateError::NoService { service }) if service.as_str() == "redis"
     ));
+}
+
+#[test]
+fn the_run_stamp_is_month_day_and_time_in_utc() {
+    let at = OffsetDateTime::from_unix_timestamp(1_794_906_303).unwrap();
+    assert_eq!(run_stamp(at), "1117-090503");
+}
+
+fn project_named(name: &str) -> Project {
+    Project {
+        id: ProjectId::parse("7ihtah").unwrap(),
+        org: OrgId::parse("o-5bt4rj").unwrap(),
+        name: Name::parse(name).unwrap(),
+        repo: Repo::parse("enojen/tenport").unwrap(),
+    }
+}
+
+#[test]
+fn a_long_project_label_is_cut_to_63_characters_that_end_in_a_letter_or_digit() {
+    let name = format!("{}-.x", "a".repeat(61));
+
+    let label = project_label(&project_named(&name));
+
+    assert_eq!(label, "a".repeat(61));
+}
+
+#[test]
+fn a_project_name_that_is_a_label_value_stays_as_it_is() {
+    assert_eq!(
+        project_label(&project_named("Tenbox_demo.2")),
+        "Tenbox_demo.2"
+    );
 }

@@ -9,7 +9,7 @@ use tenport_server::command::{self, Command, USAGE};
 use tenport_server::config::Config;
 use tenport_server::github::{GITHUB_API, GithubApp};
 use tenport_server::http::{self, AppState, Limiter, Limits};
-use tenport_server::run_credentials::{InjectorToken, RunCredentialKey};
+use tenport_server::run_credentials::{InjectorToken, RunCredentialKey, RunCredentials};
 use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::task_archives::TaskArchiveBucket;
 use tenport_server::{db, logs};
@@ -17,7 +17,7 @@ use tokio::net::TcpListener;
 use tokio::signal::unix::{Signal, SignalKind, signal};
 
 const USAGE_EXIT: u8 = 2;
-const ENDED_RUNS_PERIOD: Duration = Duration::from_secs(30);
+const FINISHED_RUNS_PERIOD: Duration = Duration::from_secs(30);
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -90,13 +90,18 @@ async fn serve() -> anyhow::Result<()> {
         services_dir: config.run_services,
     };
     let cluster: Arc<dyn Cluster> = Arc::new(cluster);
+    let task_archives = Arc::new(task_archives);
+    let run_credentials = Arc::new(RunCredentials::new(
+        cluster.clone(),
+        run_credential_key,
+        github,
+    ));
     let runs = Runs::new(
         cluster.clone(),
         template,
         config.box_image,
-        task_archives,
-        run_credential_key,
-        github,
+        task_archives.clone(),
+        run_credentials.clone(),
     );
     let listener = TcpListener::bind(config.listen)
         .await
@@ -106,12 +111,14 @@ async fn serve() -> anyhow::Result<()> {
     let runs = Arc::new(runs);
     tokio::spawn(
         runs.clone()
-            .record_finished_runs_every(db.clone(), ENDED_RUNS_PERIOD),
+            .record_finished_runs_every(db.clone(), FINISHED_RUNS_PERIOD),
     );
     let state = AppState {
         db,
         cluster,
         runs,
+        run_credentials,
+        task_archives,
         injector_token: Arc::new(injector_token),
         limiter: Arc::new(Limiter::new(Limits::default())),
     };

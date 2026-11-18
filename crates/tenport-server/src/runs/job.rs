@@ -7,8 +7,16 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
-use super::model::{ClassName, ServiceName};
+use time::OffsetDateTime;
 
+use super::NewRun;
+use super::model::{ClassName, ServiceName};
+use crate::projects::Project;
+use crate::task_archives::TaskArchiveUrls;
+use crate::tasks::TaskId;
+
+const GITHUB: &str = "https://github.com";
+const LABEL_VALUE_MAX: usize = 63;
 const JOB_FILE: &str = "job.yaml";
 const CLASSES_FILE: &str = "classes.yaml";
 const SERVICE_EXTENSION: &str = "yaml";
@@ -280,6 +288,73 @@ fn mark_managed(job: &mut Value) {
             labels.insert(MANAGED_BY_LABEL.to_owned(), Value::from(MANAGER));
         }
     }
+}
+
+pub fn fields(
+    project: &Project,
+    new: &NewRun,
+    image: &str,
+    archive: TaskArchiveUrls,
+    now: OffsetDateTime,
+) -> TemplateFields {
+    let kube_task = kube_name(&new.task);
+    let run = run_stamp(now);
+    TemplateFields {
+        name: kube_task,
+        task: new.task.to_string(),
+        run,
+        project: project_label(project),
+        project_id: project.id.to_string(),
+        repo: format!("{GITHUB}/{}.git", project.repo.as_str()),
+        base: new.base.as_str().to_owned(),
+        git_name: new.author.name.as_str().to_owned(),
+        git_email: new.author.email.to_string(),
+        image: image.to_owned(),
+        command: new.command.name().as_str().to_owned(),
+        cmd: new.command.shell_line(),
+        env: new.env.clone(),
+        class: new.class.clone(),
+        archive_get: archive.get,
+        archive_put: archive.put,
+        setup: new.setup.clone(),
+    }
+}
+
+fn project_label(project: &Project) -> String {
+    let mut value = String::new();
+    for char in project.name.as_str().chars() {
+        if is_label_char(char) {
+            value.push(char);
+        } else if !value.ends_with('-') {
+            value.push('-');
+        }
+    }
+    let value: String = value.chars().take(LABEL_VALUE_MAX).collect();
+    let value = value.trim_matches(|char: char| !char.is_ascii_alphanumeric());
+    if value.is_empty() {
+        project.id.to_string()
+    } else {
+        value.to_owned()
+    }
+}
+
+fn is_label_char(char: char) -> bool {
+    char.is_ascii_alphanumeric() || matches!(char, '-' | '_' | '.')
+}
+
+fn kube_name(task: &TaskId) -> String {
+    task.to_string().to_lowercase().replace('_', "-")
+}
+
+fn run_stamp(now: OffsetDateTime) -> String {
+    format!(
+        "{:02}{:02}-{:02}{:02}{:02}",
+        u8::from(now.month()),
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second()
+    )
 }
 
 #[cfg(test)]

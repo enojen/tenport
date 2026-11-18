@@ -20,8 +20,9 @@ use std::sync::Arc;
 
 use crate::cluster::Cluster;
 use crate::db::Db;
-use crate::run_credentials::InjectorToken;
+use crate::run_credentials::{InjectorToken, RunCredentials};
 use crate::runs::Runs;
+use crate::task_archives::TaskArchiveBucket;
 
 pub use limits::{Limiter, Limits};
 pub use router::router;
@@ -31,6 +32,8 @@ pub struct AppState {
     pub db: Db,
     pub cluster: Arc<dyn Cluster>,
     pub runs: Arc<Runs>,
+    pub run_credentials: Arc<RunCredentials>,
+    pub task_archives: Arc<TaskArchiveBucket>,
     pub injector_token: Arc<InjectorToken>,
     pub limiter: Arc<Limiter>,
 }

@@ -1,15 +1,24 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use sha2::{Digest, Sha256};
+use time::OffsetDateTime;
 
-use crate::cluster::{JobName, JobUid, SecretName};
+use crate::cluster::{
+    Cluster, ClusterError, JobName, JobState, JobUid, PROJECT_ID_LABEL, SecretName, TENPORT_JOBS,
+};
+use crate::db::Db;
+use crate::github::{GITHUB_HOSTS, GithubApp, GithubError, RepoToken};
+use crate::projects::{self, ProjectId, ProjectsError};
 
 #[cfg(test)]
 mod tests;
 
 pub const RUN_TOKEN_KEY: &str = "token";
+const TOKEN_REUSE_MARGIN: time::Duration = time::Duration::minutes(5);
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunCredentialsError {
@@ -17,6 +26,93 @@ pub enum RunCredentialsError {
     Read { path: PathBuf, source: io::Error },
     #[error("{} is empty", path.display())]
     Empty { path: PathBuf },
+    #[error("no open Job of Tenport has this placeholder for {host}")]
+    NoRunCredential { host: String },
+    #[error(transparent)]
+    Github(#[from] GithubError),
+    #[error(transparent)]
+    Cluster(#[from] ClusterError),
+    #[error(transparent)]
+    Projects(#[from] ProjectsError),
+}
+
+pub struct RunCredentials {
+    cluster: Arc<dyn Cluster>,
+    key: RunCredentialKey,
+    github: GithubApp,
+    repo_tokens: Mutex<HashMap<JobUid, RepoToken>>,
+}
+
+impl RunCredentials {
+    pub fn new(cluster: Arc<dyn Cluster>, key: RunCredentialKey, github: GithubApp) -> Self {
+        Self {
+            cluster,
+            key,
+            github,
+            repo_tokens: Mutex::default(),
+        }
+    }
+
+    pub fn placeholder(&self, job: &JobUid) -> String {
+        self.key.placeholder(job)
+    }
+
+    pub async fn repo_token(
+        &self,
+        db: &Db,
+        placeholder: &str,
+        host: &str,
+    ) -> Result<String, RunCredentialsError> {
+        let none = || RunCredentialsError::NoRunCredential {
+            host: host.to_owned(),
+        };
+        if !GITHUB_HOSTS.contains(&host) {
+            return Err(none());
+        }
+        let open = self.list_open_jobs().await?;
+        self.forget_tokens_of_ended_jobs(&open);
+        let job = open
+            .iter()
+            .find(|job| self.placeholder(&job.uid) == placeholder)
+            .ok_or_else(none)?;
+        let now = OffsetDateTime::now_utc();
+        if let Some(token) = self.reusable_token(&job.uid, now) {
+            return Ok(token);
+        }
+        let project = job
+            .labels
+            .get(PROJECT_ID_LABEL)
+            .and_then(|id| ProjectId::parse(id).ok())
+            .ok_or_else(none)?;
+        let project = projects::find(db, &project).await?.ok_or_else(none)?;
+        let token = self.github.repo_token(&project.repo, now).await?;
+        let value = token.token.clone();
+        self.lock_repo_tokens().insert(job.uid.clone(), token);
+        Ok(value)
+    }
+
+    async fn list_open_jobs(&self) -> Result<Vec<JobState>, ClusterError> {
+        let jobs = self.cluster.list_jobs(TENPORT_JOBS).await?;
+        Ok(jobs.into_iter().filter(JobState::is_running).collect())
+    }
+
+    fn reusable_token(&self, job: &JobUid, now: OffsetDateTime) -> Option<String> {
+        self.lock_repo_tokens()
+            .get(job)
+            .filter(|token| token.expires - now > TOKEN_REUSE_MARGIN)
+            .map(|token| token.token.clone())
+    }
+
+    fn forget_tokens_of_ended_jobs(&self, open: &[JobState]) {
+        self.lock_repo_tokens()
+            .retain(|uid, _| open.iter().any(|job| job.uid == *uid));
+    }
+
+    fn lock_repo_tokens(&self) -> MutexGuard<'_, HashMap<JobUid, RepoToken>> {
+        self.repo_tokens
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
 }
 
 pub struct RunCredentialKey(String);
