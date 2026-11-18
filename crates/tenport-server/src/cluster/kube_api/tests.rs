@@ -126,11 +126,13 @@ fn the_newest_pod_is_the_one_read() {
 fn a_new_secret_is_opaque_and_holds_only_the_written_key() {
     let secret = new_secret(
         &SecretName::new("project-abc123"),
+        None,
         "ntfy_url",
         "https://n/x",
     );
     assert_eq!(secret.metadata.name.as_deref(), Some("project-abc123"));
     assert_eq!(secret.type_.as_deref(), Some("Opaque"));
+    assert_eq!(secret.metadata.owner_references, None);
     assert_eq!(
         secret.string_data,
         Some([("ntfy_url".to_owned(), "https://n/x".to_owned())].into())
@@ -144,7 +146,8 @@ fn a_job_secret_names_its_job_as_owner_so_it_goes_with_the_job() {
         uid: JobUid::new("0f3c1c9e-5a7b-4e2d-9c1a-7b6d5e4f3a21"),
     };
 
-    let owner = job_owner(&job);
+    let secret = new_secret(&SecretName::new("run-x"), Some(&job), "k", "v");
+    let owner = &secret.metadata.owner_references.unwrap()[0];
 
     assert_eq!(owner.api_version, "batch/v1");
     assert_eq!(owner.kind, "Job");

@@ -49,13 +49,9 @@ impl KubeCluster {
         key: &str,
         value: &str,
     ) -> Result<(), ClusterError> {
-        let params = PostParams {
-            field_manager: Some(MANAGER.to_owned()),
-            ..PostParams::default()
-        };
         match self
             .secrets
-            .create(&params, &new_secret(secret, key, value))
+            .create(&as_tenport(), &new_secret(secret, None, key, value))
             .await
         {
             Ok(_) => Ok(()),
@@ -83,7 +79,7 @@ impl Cluster for KubeCluster {
     fn create_job(&self, job: Job) -> BoxFuture<'_, Result<CreatedJob, ClusterError>> {
         async move {
             let name = JobName::new(job.metadata.name.clone().ok_or(ClusterError::NoName)?);
-            match self.jobs.create(&PostParams::default(), &job).await {
+            match self.jobs.create(&as_tenport(), &job).await {
                 Ok(created) => created_job(name, created.metadata.uid),
                 Err(error) if status_code(&error) == Some(CONFLICT) => {
                     Err(ClusterError::Exists(name))
@@ -218,14 +214,8 @@ impl Cluster for KubeCluster {
         value: &'a str,
     ) -> BoxFuture<'a, Result<(), ClusterError>> {
         async move {
-            let params = PostParams {
-                field_manager: Some(MANAGER.to_owned()),
-                ..PostParams::default()
-            };
-            let mut new = new_secret(secret, key, value);
-            new.metadata.owner_references = Some(vec![job_owner(owner)]);
             self.secrets
-                .create(&params, &new)
+                .create(&as_tenport(), &new_secret(secret, Some(owner), key, value))
                 .await
                 .map(|_| ())
                 .map_err(ClusterError::Kube)
@@ -256,10 +246,18 @@ fn string_data(key: &str, value: &str) -> Value {
     json!({ "stringData": { key: value } })
 }
 
-fn new_secret(secret: &SecretName, key: &str, value: &str) -> Secret {
+fn as_tenport() -> PostParams {
+    PostParams {
+        field_manager: Some(MANAGER.to_owned()),
+        ..PostParams::default()
+    }
+}
+
+fn new_secret(secret: &SecretName, owner: Option<&CreatedJob>, key: &str, value: &str) -> Secret {
     Secret {
         metadata: ObjectMeta {
             name: Some(secret.as_str().to_owned()),
+            owner_references: owner.map(|job| vec![job_owner(job)]),
             ..ObjectMeta::default()
         },
         type_: Some(OPAQUE.to_owned()),
