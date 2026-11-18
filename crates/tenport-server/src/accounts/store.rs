@@ -1,4 +1,4 @@
-use sqlx::SqliteConnection;
+use sqlx::{SqliteConnection, SqliteExecutor};
 
 use super::model::{
     MemberAdded, Membership, OrganizationAdded, OrganizationId, Role, TokenAdded, TokenHash, User,
@@ -84,19 +84,19 @@ pub async fn insert_token(
 }
 
 pub async fn find_organization_id_by_name(
-    conn: &mut SqliteConnection,
+    executor: impl SqliteExecutor<'_>,
     name: &Name,
 ) -> Result<Option<OrganizationId>, sqlx::Error> {
     sqlx::query_scalar!(
         r#"select id as "id: OrganizationId" from organizations where name = ?"#,
         name,
     )
-    .fetch_optional(conn)
+    .fetch_optional(executor)
     .await
 }
 
 pub async fn find_user_by_token_hash(
-    conn: &mut SqliteConnection,
+    executor: impl SqliteExecutor<'_>,
     hash: &TokenHash,
 ) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as!(
@@ -107,12 +107,12 @@ pub async fn find_user_by_token_hash(
            where tokens.hash = ?"#,
         hash,
     )
-    .fetch_optional(conn)
+    .fetch_optional(executor)
     .await
 }
 
 pub async fn list_memberships_of_user(
-    conn: &mut SqliteConnection,
+    executor: impl SqliteExecutor<'_>,
     user: &UserId,
 ) -> Result<Vec<Membership>, sqlx::Error> {
     sqlx::query_as!(
@@ -123,12 +123,12 @@ pub async fn list_memberships_of_user(
            order by organizations.name"#,
         user,
     )
-    .fetch_all(conn)
+    .fetch_all(executor)
     .await
 }
 
 pub async fn find_role_of_user(
-    conn: &mut SqliteConnection,
+    executor: impl SqliteExecutor<'_>,
     organization: &OrganizationId,
     user: &UserId,
 ) -> Result<Option<Role>, sqlx::Error> {
@@ -137,6 +137,6 @@ pub async fn find_role_of_user(
         organization,
         user,
     )
-    .fetch_optional(conn)
+    .fetch_optional(executor)
     .await
 }

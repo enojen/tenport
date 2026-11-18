@@ -58,8 +58,8 @@ pub async fn delete_task(
 }
 
 #[cfg(test)]
-pub async fn count_open_tasks(conn: &mut SqliteConnection) -> Result<i64, sqlx::Error> {
+pub async fn count_open_tasks(executor: impl sqlx::SqliteExecutor<'_>) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar!("select count(*) from tasks where closed_at is null")
-        .fetch_one(conn)
+        .fetch_one(executor)
         .await
 }

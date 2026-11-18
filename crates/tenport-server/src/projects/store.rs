@@ -1,8 +1,11 @@
-use sqlx::SqliteConnection;
+use sqlx::{SqliteConnection, SqliteExecutor};
 
-use super::model::{Project, ProjectAdded, ProjectId, ProjectSecret, SecretChanged, SecretState};
-use crate::accounts::{Role, UserId};
+use super::model::{
+    Project, ProjectAdded, ProjectId, ProjectSecret, Repo, SecretChanged, SecretState,
+};
+use crate::accounts::{OrganizationId, Role, UserId};
 use crate::events::Stamp;
+use crate::name::Name;
 
 pub async fn insert_project(
     conn: &mut SqliteConnection,
@@ -25,7 +28,7 @@ pub async fn insert_project(
 }
 
 pub async fn list_projects_of_user(
-    conn: &mut SqliteConnection,
+    executor: impl SqliteExecutor<'_>,
     user: &UserId,
     after: Option<&ProjectId>,
     limit: i64,
@@ -45,12 +48,12 @@ pub async fn list_projects_of_user(
         after,
         limit,
     )
-    .fetch_all(conn)
+    .fetch_all(executor)
     .await
 }
 
 pub async fn find_project(
-    conn: &mut SqliteConnection,
+    executor: impl SqliteExecutor<'_>,
     project: &ProjectId,
 ) -> Result<Option<Project>, sqlx::Error> {
     sqlx::query_as!(
@@ -59,42 +62,43 @@ pub async fn find_project(
            from projects where id = ?"#,
         project,
     )
-    .fetch_optional(conn)
+    .fetch_optional(executor)
     .await
 }
 
-pub async fn find_project_for_member(
-    conn: &mut SqliteConnection,
+struct ProjectRoleRow {
+    id: ProjectId,
+    organization: OrganizationId,
+    name: Name,
+    repo: Repo,
+    role: Role,
+}
+
+pub async fn find_project_and_role_of_user(
+    executor: impl SqliteExecutor<'_>,
     project: &ProjectId,
     user: &UserId,
-) -> Result<Option<Project>, sqlx::Error> {
-    sqlx::query_as!(
-        Project,
+) -> Result<Option<(Project, Role)>, sqlx::Error> {
+    let row = sqlx::query_as!(
+        ProjectRoleRow,
         r#"select projects.id as "id: _", projects.organization_id as "organization: _", projects.name as "name: _",
-                  projects.repo as "repo: _"
+                  projects.repo as "repo: _", memberships.role as "role: _"
            from projects join memberships on memberships.organization_id = projects.organization_id
            where projects.id = ? and memberships.user_id = ?"#,
         project,
         user,
     )
-    .fetch_optional(conn)
-    .await
-}
-
-pub async fn find_role_of_user_in_project(
-    conn: &mut SqliteConnection,
-    project: &ProjectId,
-    user: &UserId,
-) -> Result<Option<Role>, sqlx::Error> {
-    sqlx::query_scalar!(
-        r#"select memberships.role as "role: Role"
-           from projects join memberships on memberships.organization_id = projects.organization_id
-           where projects.id = ? and memberships.user_id = ?"#,
-        project,
-        user,
-    )
-    .fetch_optional(conn)
-    .await
+    .fetch_optional(executor)
+    .await?;
+    Ok(row.map(|row| {
+        let project = Project {
+            id: row.id,
+            organization: row.organization,
+            name: row.name,
+            repo: row.repo,
+        };
+        (project, row.role)
+    }))
 }
 
 pub async fn insert_secret(
@@ -133,7 +137,7 @@ pub async fn delete_secret(
 }
 
 pub async fn find_secret(
-    conn: &mut SqliteConnection,
+    executor: impl SqliteExecutor<'_>,
     project: &ProjectId,
     secret: ProjectSecret,
 ) -> Result<Option<SecretState>, sqlx::Error> {
@@ -144,12 +148,12 @@ pub async fn find_secret(
         project,
         secret,
     )
-    .fetch_optional(conn)
+    .fetch_optional(executor)
     .await
 }
 
 pub async fn list_secrets_of_project(
-    conn: &mut SqliteConnection,
+    executor: impl SqliteExecutor<'_>,
     project: &ProjectId,
 ) -> Result<Vec<SecretState>, sqlx::Error> {
     sqlx::query_as!(
@@ -158,6 +162,6 @@ pub async fn list_secrets_of_project(
            from project_secrets where project_id = ? order by secret"#,
         project,
     )
-    .fetch_all(conn)
+    .fetch_all(executor)
     .await
 }

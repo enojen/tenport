@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "select projects.id as \"id: _\", projects.organization_id as \"organization: _\", projects.name as \"name: _\",\n                  projects.repo as \"repo: _\"\n           from projects join memberships on memberships.organization_id = projects.organization_id\n           where projects.id = ? and memberships.user_id = ?",
+  "query": "select projects.id as \"id: _\", projects.organization_id as \"organization: _\", projects.name as \"name: _\",\n                  projects.repo as \"repo: _\", memberships.role as \"role: _\"\n           from projects join memberships on memberships.organization_id = projects.organization_id\n           where projects.id = ? and memberships.user_id = ?",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "repo"
           }
         }
+      },
+      {
+        "name": "role: _",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "memberships",
+            "name": "role"
+          }
+        }
       }
     ],
     "parameters": {
@@ -55,8 +66,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "91e76a03b566a5eebd22bcc9e7d52d90c9226fa5d6af7bb6be7351eba8228ae0"
+  "hash": "d0f6e7a2e5d34eb909e6ead7099fd0d2516fe02c8e962556a2796f502b5e8ee6"
 }

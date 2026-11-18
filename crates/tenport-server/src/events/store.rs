@@ -1,4 +1,4 @@
-use sqlx::SqliteConnection;
+use sqlx::{SqliteConnection, SqliteExecutor};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Row {
@@ -27,7 +27,7 @@ pub async fn insert_event(conn: &mut SqliteConnection, row: &Row) -> Result<bool
 }
 
 pub async fn find_event_by_id(
-    conn: &mut SqliteConnection,
+    executor: impl SqliteExecutor<'_>,
     id: &str,
 ) -> Result<Option<Row>, sqlx::Error> {
     sqlx::query_as!(
@@ -35,13 +35,13 @@ pub async fn find_event_by_id(
         r#"select id, type as "kind", subject, actor, at, body from events where id = ?"#,
         id,
     )
-    .fetch_optional(conn)
+    .fetch_optional(executor)
     .await
 }
 
 #[cfg(test)]
-pub async fn count_events(conn: &mut SqliteConnection) -> Result<i64, sqlx::Error> {
+pub async fn count_events(executor: impl SqliteExecutor<'_>) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar!("select count(*) from events")
-        .fetch_one(conn)
+        .fetch_one(executor)
         .await
 }

@@ -30,9 +30,7 @@ fn reported(event: TasksEvent) -> Reported {
 }
 
 async fn open_tasks(db: &Db) -> i64 {
-    store::count_open_tasks(&mut db.acquire().await.unwrap())
-        .await
-        .unwrap()
+    store::count_open_tasks(db).await.unwrap()
 }
 
 #[tokio::test]

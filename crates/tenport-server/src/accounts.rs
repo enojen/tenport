@@ -92,13 +92,11 @@ pub async fn add_user(db: &Db, actor: Actor, new: NewUser) -> Result<AddedUser, 
 }
 
 pub async fn authenticate(db: &Db, token: &Token) -> Result<Option<User>, AccountsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::find_user_by_token_hash(&mut conn, &token.hash()).await?)
+    Ok(store::find_user_by_token_hash(db, &token.hash()).await?)
 }
 
 pub async fn memberships(db: &Db, user: &UserId) -> Result<Vec<Membership>, AccountsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::list_memberships_of_user(&mut conn, user).await?)
+    Ok(store::list_memberships_of_user(db, user).await?)
 }
 
 pub async fn find_role(
@@ -106,8 +104,7 @@ pub async fn find_role(
     organization: &OrganizationId,
     user: &UserId,
 ) -> Result<Option<Role>, AccountsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::find_role_of_user(&mut conn, organization, user).await?)
+    Ok(store::find_role_of_user(db, organization, user).await?)
 }
 
 pub(crate) async fn apply(
@@ -130,8 +127,7 @@ pub(crate) async fn find_organization_id(
     db: &Db,
     name: &Name,
 ) -> Result<Option<OrganizationId>, AccountsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::find_organization_id_by_name(&mut conn, name).await?)
+    Ok(store::find_organization_id_by_name(db, name).await?)
 }
 
 fn add_organization(events: &mut Vec<Event>, name: Name) -> OrganizationId {
