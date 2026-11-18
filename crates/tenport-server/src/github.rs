@@ -14,7 +14,7 @@ use serde::de::DeserializeOwned;
 use serde_json::json;
 use time::OffsetDateTime;
 
-use crate::https::{HttpsError, https_client};
+use crate::https_client::{HttpsError, https_client};
 use crate::projects::Repo;
 
 #[cfg(test)]

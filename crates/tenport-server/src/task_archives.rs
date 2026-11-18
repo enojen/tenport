@@ -10,7 +10,7 @@ use url::Url;
 use utoipa::ToSchema;
 
 use crate::config::TaskArchiveBucketConfig;
-use crate::https::{HttpsError, https_client};
+use crate::https_client::{HttpsError, https_client};
 use crate::projects::ProjectId;
 use crate::tasks::TaskId;
 

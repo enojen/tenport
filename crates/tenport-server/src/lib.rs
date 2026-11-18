@@ -10,7 +10,7 @@ pub mod events;
 mod fixtures;
 pub mod github;
 pub mod http;
-pub mod https;
+pub mod https_client;
 mod id;
 pub mod logs;
 pub mod name;
