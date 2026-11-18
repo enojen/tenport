@@ -28,56 +28,49 @@ pub enum AccountsError {
     Database(#[from] sqlx::Error),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NewUser {
+    pub organization_name: Name,
     pub name: Name,
     pub email: Option<Email>,
     pub github: GithubLogin,
-}
-
-#[derive(Debug, Clone)]
-pub struct Registration {
-    pub organization: Name,
-    pub user: NewUser,
     pub role: Role,
     pub token_name: Name,
 }
 
-#[derive(Debug)]
-pub struct Registered {
-    pub organization: OrganizationId,
+#[derive(Debug, serde::Serialize)]
+pub struct AddedUser {
     pub user: UserId,
+    pub organization: OrganizationId,
+    pub role: Role,
+    #[serde(serialize_with = "expose_token")]
     pub token: Token,
 }
 
-pub async fn register(
-    db: &Db,
-    actor: Actor,
-    registration: Registration,
-) -> Result<Registered, AccountsError> {
+pub async fn add_user(db: &Db, actor: Actor, new: NewUser) -> Result<AddedUser, AccountsError> {
     let mut events = Vec::new();
-    let organization =
-        find_or_new_organization(db, &registration.organization, &mut events).await?;
+    let organization = find_or_new_organization(db, &new.organization_name, &mut events).await?;
     let user = UserId::random();
     let token = Token::random();
-    events.push(user_added(&user, &registration.user));
+    events.push(user_added(&user, &new));
     events.push(Event::Accounts(AccountsEvent::MemberAdded(MemberAdded {
         organization: organization.clone(),
         user: user.clone(),
-        role: registration.role,
+        role: new.role,
     })));
     events.push(Event::Accounts(AccountsEvent::TokenAdded(TokenAdded {
         id: TokenId::random(),
         user: user.clone(),
-        name: registration.token_name,
+        name: new.token_name,
         hash: token.hash(),
     })));
     events::append_all(db, actor, events)
         .await
-        .map_err(|error| registration_error(error, &registration.user.github))?;
-    Ok(Registered {
-        organization,
+        .map_err(|error| add_user_error(error, &new.github))?;
+    Ok(AddedUser {
         user,
+        organization,
+        role: new.role,
         token,
     })
 }
@@ -145,7 +138,7 @@ fn user_added(id: &UserId, user: &NewUser) -> Event {
     }))
 }
 
-fn registration_error(error: EventsError, github: &GithubLogin) -> AccountsError {
+fn add_user_error(error: EventsError, github: &GithubLogin) -> AccountsError {
     if error.violates_unique(UNIQUE_GITHUB) {
         AccountsError::UserExists {
             github: github.clone(),
@@ -153,6 +146,10 @@ fn registration_error(error: EventsError, github: &GithubLogin) -> AccountsError
     } else {
         AccountsError::Events(error)
     }
+}
+
+fn expose_token<S: serde::Serializer>(token: &Token, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(token.expose())
 }
 
 #[cfg(test)]

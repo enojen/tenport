@@ -2,35 +2,33 @@ use super::*;
 use crate::db;
 use crate::name::Name;
 
-fn registration(organization: &str, github: &str) -> Registration {
-    Registration {
-        organization: Name::parse(organization).unwrap(),
-        user: NewUser {
-            name: Name::parse("Enes").unwrap(),
-            email: None,
-            github: GithubLogin::parse(github).unwrap(),
-        },
+fn new_user(organization: &str, github: &str) -> NewUser {
+    NewUser {
+        organization_name: Name::parse(organization).unwrap(),
+        name: Name::parse("Enes").unwrap(),
+        email: None,
+        github: GithubLogin::parse(github).unwrap(),
         role: Role::Admin,
         token_name: Name::parse("laptop").unwrap(),
     }
 }
 
 #[tokio::test]
-async fn registers_a_user_with_an_organization_and_a_token() {
+async fn adds_a_user_with_an_organization_and_a_token() {
     let (db, _dir) = db::temp().await;
-    let registered = register(&db, Actor::Server, registration(" Wegobi ", "enojen"))
+    let added = add_user(&db, Actor::Server, new_user(" Wegobi ", "enojen"))
         .await
         .unwrap();
-    assert!(registered.user.as_str().starts_with("u-"));
-    assert!(registered.organization.as_str().starts_with("o-"));
-    let user = authenticate(&db, &registered.token).await.unwrap().unwrap();
-    assert_eq!(user.id, registered.user);
+    assert!(added.user.as_str().starts_with("u-"));
+    assert!(added.organization.as_str().starts_with("o-"));
+    let user = authenticate(&db, &added.token).await.unwrap().unwrap();
+    assert_eq!(user.id, added.user);
     assert_eq!(user.github.as_str(), "enojen");
     let memberships = memberships(&db, &user.id).await.unwrap();
     assert_eq!(
         memberships,
         vec![Membership {
-            organization: registered.organization,
+            organization: added.organization,
             organization_name: Name::parse("Wegobi").unwrap(),
             role: Role::Admin,
         }]
@@ -40,10 +38,10 @@ async fn registers_a_user_with_an_organization_and_a_token() {
 #[tokio::test]
 async fn a_second_user_joins_the_organization_that_exists() {
     let (db, _dir) = db::temp().await;
-    let first = register(&db, Actor::Server, registration("Wegobi", "enojen"))
+    let first = add_user(&db, Actor::Server, new_user("Wegobi", "enojen"))
         .await
         .unwrap();
-    let second = register(&db, Actor::Server, registration("Wegobi", "ali"))
+    let second = add_user(&db, Actor::Server, new_user("Wegobi", "ali"))
         .await
         .unwrap();
     assert_eq!(first.organization, second.organization);
@@ -52,10 +50,10 @@ async fn a_second_user_joins_the_organization_that_exists() {
 #[tokio::test]
 async fn refuses_a_github_login_that_exists_and_writes_nothing() {
     let (db, _dir) = db::temp().await;
-    register(&db, Actor::Server, registration("Wegobi", "enojen"))
+    add_user(&db, Actor::Server, new_user("Wegobi", "enojen"))
         .await
         .unwrap();
-    let error = register(&db, Actor::Server, registration("Other", "enojen"))
+    let error = add_user(&db, Actor::Server, new_user("Other", "enojen"))
         .await
         .unwrap_err();
     assert!(
@@ -68,7 +66,7 @@ async fn refuses_a_github_login_that_exists_and_writes_nothing() {
 #[tokio::test]
 async fn an_unknown_token_finds_nobody() {
     let (db, _dir) = db::temp().await;
-    register(&db, Actor::Server, registration("Wegobi", "enojen"))
+    add_user(&db, Actor::Server, new_user("Wegobi", "enojen"))
         .await
         .unwrap();
     let user = authenticate(&db, &Token::random()).await.unwrap();

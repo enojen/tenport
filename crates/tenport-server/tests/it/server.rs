@@ -3,7 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use tempfile::TempDir;
-use tenport_server::accounts::{self, GithubLogin, NewUser, Registration, Role, Token};
+use tenport_server::accounts::{self, GithubLogin, NewUser, Role, Token};
 use tenport_server::cluster::FakeCluster;
 use tenport_server::db::{self, Db};
 use tenport_server::events::Actor;
@@ -78,18 +78,16 @@ impl TestServer {
 }
 
 impl TestServer {
-    pub async fn register(&self, organization: &str, github: &str, role: Role) -> Token {
-        let registration = Registration {
-            organization: Name::parse(organization).unwrap(),
-            user: NewUser {
-                name: Name::parse(github).unwrap(),
-                email: None,
-                github: GithubLogin::parse(github).unwrap(),
-            },
+    pub async fn add_user(&self, organization: &str, github: &str, role: Role) -> Token {
+        let new_user = NewUser {
+            organization_name: Name::parse(organization).unwrap(),
+            name: Name::parse(github).unwrap(),
+            email: None,
+            github: GithubLogin::parse(github).unwrap(),
             role,
             token_name: Name::parse("test").unwrap(),
         };
-        accounts::register(&self.db, Actor::Server, registration)
+        accounts::add_user(&self.db, Actor::Server, new_user)
             .await
             .unwrap()
             .token

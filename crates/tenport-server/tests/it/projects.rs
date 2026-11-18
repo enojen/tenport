@@ -42,7 +42,7 @@ async fn get_projects(server: &TestServer, token: &Token) -> Value {
 #[tokio::test]
 async fn an_admin_adds_a_project_and_lists_it() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let organization = organization_of(&server, &token).await;
     let response = post_project(
         &server,
@@ -61,8 +61,8 @@ async fn an_admin_adds_a_project_and_lists_it() {
 #[tokio::test]
 async fn a_member_is_forbidden_to_add_a_project() {
     let server = TestServer::start().await;
-    let admin = server.register("Wegobi", "enojen", Role::Admin).await;
-    let member = server.register("Wegobi", "ali", Role::Member).await;
+    let admin = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let member = server.add_user("Wegobi", "ali", Role::Member).await;
     let organization = organization_of(&server, &member).await;
     let response = post_project(
         &server,
@@ -79,7 +79,7 @@ async fn a_member_is_forbidden_to_add_a_project() {
 #[tokio::test]
 async fn a_bad_repo_is_a_bad_request() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let organization = organization_of(&server, &token).await;
     let response = post_project(
         &server,

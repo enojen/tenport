@@ -1,6 +1,6 @@
 use super::*;
 use crate::db;
-use crate::fixtures::register;
+use crate::fixtures::add_user;
 
 fn new_project(organization: &OrganizationId, name: &str) -> NewProject {
     NewProject {
@@ -13,7 +13,7 @@ fn new_project(organization: &OrganizationId, name: &str) -> NewProject {
 #[tokio::test]
 async fn an_admin_adds_a_project_and_sees_it() {
     let (db, _dir) = db::temp().await;
-    let admin = register(&db, "Wegobi", "enojen", Role::Admin).await;
+    let admin = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
     let added = add(
         &db,
         &admin.user,
@@ -30,8 +30,8 @@ async fn an_admin_adds_a_project_and_sees_it() {
 #[tokio::test]
 async fn a_member_cannot_add_a_project() {
     let (db, _dir) = db::temp().await;
-    let admin = register(&db, "Wegobi", "enojen", Role::Admin).await;
-    let member = register(&db, "Wegobi", "ali", Role::Member).await;
+    let admin = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
+    let member = add_user(&db, "Wegobi", "ali", Role::Member).await;
     let error = add(
         &db,
         &member.user,
@@ -54,8 +54,8 @@ async fn a_member_cannot_add_a_project() {
 #[tokio::test]
 async fn a_user_sees_only_the_projects_of_their_organizations() {
     let (db, _dir) = db::temp().await;
-    let wegobi = register(&db, "Wegobi", "enojen", Role::Admin).await;
-    let other = register(&db, "Other", "ali", Role::Admin).await;
+    let wegobi = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
+    let other = add_user(&db, "Other", "ali", Role::Admin).await;
     add(
         &db,
         &wegobi.user,

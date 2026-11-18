@@ -88,7 +88,7 @@ async fn event_bodies(server: &TestServer) -> String {
 #[tokio::test]
 async fn an_admin_writes_a_secret_and_tenport_gives_back_only_its_name() {
     let server = TestServer::start().await;
-    let admin = server.register("Wegobi", "enojen", Role::Admin).await;
+    let admin = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = add_project(&server, &admin).await;
 
     let response = put_secret(
@@ -124,8 +124,8 @@ async fn an_admin_writes_a_secret_and_tenport_gives_back_only_its_name() {
 #[tokio::test]
 async fn a_member_reads_the_names_but_is_forbidden_to_write() {
     let server = TestServer::start().await;
-    let admin = server.register("Wegobi", "enojen", Role::Admin).await;
-    let member = server.register("Wegobi", "ali", Role::Member).await;
+    let admin = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let member = server.add_user("Wegobi", "ali", Role::Member).await;
     let project = add_project(&server, &admin).await;
 
     let response = put_secret(
@@ -149,8 +149,8 @@ async fn a_member_reads_the_names_but_is_forbidden_to_write() {
 #[tokio::test]
 async fn an_admin_of_another_organization_is_forbidden_to_list_or_write() {
     let server = TestServer::start().await;
-    let admin = server.register("Wegobi", "enojen", Role::Admin).await;
-    let stranger = server.register("Other", "veli", Role::Admin).await;
+    let admin = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let stranger = server.add_user("Other", "veli", Role::Admin).await;
     let project = add_project(&server, &admin).await;
 
     let listed = list_secrets(&server, &stranger, &project).await;
@@ -173,7 +173,7 @@ async fn an_admin_of_another_organization_is_forbidden_to_list_or_write() {
 #[tokio::test]
 async fn an_unknown_name_or_an_empty_value_is_a_bad_request() {
     let server = TestServer::start().await;
-    let admin = server.register("Wegobi", "enojen", Role::Admin).await;
+    let admin = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = add_project(&server, &admin).await;
 
     let unknown = put_secret(
@@ -201,7 +201,7 @@ async fn an_unknown_name_or_an_empty_value_is_a_bad_request() {
 #[tokio::test]
 async fn deleting_a_secret_removes_its_key_and_a_second_delete_is_not_found() {
     let server = TestServer::start().await;
-    let admin = server.register("Wegobi", "enojen", Role::Admin).await;
+    let admin = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = add_project(&server, &admin).await;
     put_secret(
         &server,

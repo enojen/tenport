@@ -7,12 +7,13 @@ use anyhow::Context;
 use tenport_server::cluster::{Cluster, KubeCluster};
 use tenport_server::command::{self, Command, USAGE};
 use tenport_server::config::Config;
+use tenport_server::events::Actor;
 use tenport_server::github::{GITHUB_API, GithubApp};
 use tenport_server::http::{self, AppState, Limiter, Limits};
 use tenport_server::run_credentials::{InjectorToken, RunCredentialKey, RunCredentials};
 use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::task_archives::TaskArchiveBucket;
-use tenport_server::{db, logs};
+use tenport_server::{accounts, db, logs};
 use tokio::net::TcpListener;
 use tokio::signal::unix::{Signal, SignalKind, signal};
 
@@ -32,7 +33,7 @@ async fn main() -> ExitCode {
     };
     let result = match command {
         Command::Serve => serve().await,
-        Command::UserAdd(registration) => add_user(registration).await,
+        Command::UserAdd(new_user) => add_user(new_user).await,
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -43,10 +44,10 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn add_user(registration: tenport_server::accounts::Registration) -> anyhow::Result<()> {
+async fn add_user(new_user: accounts::NewUser) -> anyhow::Result<()> {
     let config = Config::from_env()?;
     let db = db::open(&config.database).await?;
-    let added = command::add_user(&db, registration).await?;
+    let added = accounts::add_user(&db, Actor::Server, new_user).await?;
     let mut out = std::io::stdout().lock();
     serde_json::to_writer(&mut out, &added)?;
     writeln!(out)?;

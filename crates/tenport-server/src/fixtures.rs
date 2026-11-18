@@ -1,26 +1,24 @@
-use crate::accounts::{self, GithubLogin, NewUser, Registered, Registration, Role};
+use crate::accounts::{self, AddedUser, GithubLogin, NewUser, Role};
 use crate::db::Db;
 use crate::events::Actor;
 use crate::name::Name;
 use crate::projects::{self, NewProject, ProjectId, Repo};
 
-pub async fn register(db: &Db, organization: &str, github: &str, role: Role) -> Registered {
-    let registration = Registration {
-        organization: Name::parse(organization).unwrap(),
-        user: NewUser {
-            name: Name::parse(github).unwrap(),
-            email: None,
-            github: GithubLogin::parse(github).unwrap(),
-        },
+pub async fn add_user(db: &Db, organization: &str, github: &str, role: Role) -> AddedUser {
+    let new_user = NewUser {
+        organization_name: Name::parse(organization).unwrap(),
+        name: Name::parse(github).unwrap(),
+        email: None,
+        github: GithubLogin::parse(github).unwrap(),
         role,
         token_name: Name::parse("laptop").unwrap(),
     };
-    accounts::register(db, Actor::Server, registration)
+    accounts::add_user(db, Actor::Server, new_user)
         .await
         .unwrap()
 }
 
-pub async fn project_of(db: &Db, owner: &Registered) -> ProjectId {
+pub async fn project_of(db: &Db, owner: &AddedUser) -> ProjectId {
     let new = NewProject {
         organization: owner.organization.clone(),
         name: Name::parse("Tenport").unwrap(),

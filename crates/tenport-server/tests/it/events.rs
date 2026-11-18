@@ -59,7 +59,7 @@ const FIRST_ID: &str = "019a8f2e-7c4b-7d21-9a3e-5b8c1d2e3f40";
 #[tokio::test]
 async fn events_are_stored_once() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = add_project(&server, &token).await;
     let body = json!([task_started(FIRST_ID, &project)]);
     let first = post_events(&server, &token, body.clone()).await;
@@ -79,7 +79,7 @@ async fn events_are_stored_once() {
 #[tokio::test]
 async fn the_same_id_with_other_content_is_a_conflict() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = add_project(&server, &token).await;
     post_events(&server, &token, json!([task_started(FIRST_ID, &project)])).await;
     let mut changed = task_started(FIRST_ID, &project);
@@ -93,8 +93,8 @@ async fn the_same_id_with_other_content_is_a_conflict() {
 #[tokio::test]
 async fn a_stranger_is_forbidden() {
     let server = TestServer::start().await;
-    let owner = server.register("Wegobi", "enojen", Role::Admin).await;
-    let stranger = server.register("Other", "ali", Role::Admin).await;
+    let owner = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let stranger = server.add_user("Other", "ali", Role::Admin).await;
     let project = add_project(&server, &owner).await;
     let response = post_events(
         &server,
@@ -108,7 +108,7 @@ async fn a_stranger_is_forbidden() {
 #[tokio::test]
 async fn an_unknown_type_is_a_bad_request() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = add_project(&server, &token).await;
     let mut event = task_started(FIRST_ID, &project);
     event["type"] = json!("task.renamed");

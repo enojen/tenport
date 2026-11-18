@@ -4,9 +4,9 @@ fn args(text: &str) -> Vec<String> {
     text.split_whitespace().map(str::to_owned).collect()
 }
 
-fn registration(text: &str) -> Registration {
+fn parsed_new_user(text: &str) -> NewUser {
     match parse(&args(text)) {
-        Ok(Command::UserAdd(registration)) => registration,
+        Ok(Command::UserAdd(new_user)) => new_user,
         other => panic!("not a user add: {other:?}"),
     }
 }
@@ -18,29 +18,28 @@ fn no_arguments_serve() {
 
 #[test]
 fn user_add_reads_every_flag() {
-    let added = registration(
+    let new_user = parsed_new_user(
         "user add --name Ayse --github Ayse-K --organization demo --email a@x.dev --role admin",
     );
-    assert_eq!(added.organization.as_str(), "demo");
-    assert_eq!(added.user.name.as_str(), "Ayse");
-    assert_eq!(added.user.github.as_str(), "ayse-k");
+    assert_eq!(new_user.organization_name.as_str(), "demo");
+    assert_eq!(new_user.name.as_str(), "Ayse");
+    assert_eq!(new_user.github.as_str(), "ayse-k");
     assert_eq!(
-        added
-            .user
+        new_user
             .email
             .map(|email| email.as_str().to_owned())
             .as_deref(),
         Some("a@x.dev")
     );
-    assert_eq!(added.role, Role::Admin);
-    assert_eq!(added.token_name.as_str(), "user add");
+    assert_eq!(new_user.role, Role::Admin);
+    assert_eq!(new_user.token_name.as_str(), "user add");
 }
 
 #[test]
 fn a_user_is_a_member_with_no_email_by_default() {
-    let added = registration("user add --name Can --github can --organization demo");
-    assert_eq!(added.role, Role::Member);
-    assert_eq!(added.user.email, None);
+    let new_user = parsed_new_user("user add --name Can --github can --organization demo");
+    assert_eq!(new_user.role, Role::Member);
+    assert_eq!(new_user.email, None);
 }
 
 #[test]
