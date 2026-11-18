@@ -85,15 +85,6 @@ pub enum Role {
     Member,
 }
 
-impl Role {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Admin => "admin",
-            Self::Member => "member",
-        }
-    }
-}
-
 pub struct Token(String);
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -145,7 +136,7 @@ impl TokenHash {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct User {
     pub id: UserId,
     pub name: Name,
@@ -153,7 +144,7 @@ pub struct User {
     pub github: GithubLogin,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Membership {
     pub organization: OrganizationId,
     pub organization_name: Name,
