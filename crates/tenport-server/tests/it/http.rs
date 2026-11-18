@@ -88,10 +88,10 @@ async fn a_user_over_the_request_rate_gets_too_many_requests_with_retry_after() 
 #[tokio::test]
 async fn a_request_over_the_time_limit_is_a_timeout() {
     let limits = Limits {
-        request_timeout: Duration::from_millis(100),
+        request_timeout: Duration::from_secs(1),
         ..Limits::default()
     };
-    let cluster = FakeCluster::with_create_time(Duration::from_secs(2));
+    let cluster = FakeCluster::with_create_time(Duration::from_secs(5));
     let server = TestServer::start_with(cluster, limits).await;
     let token = server.register("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
