@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::pin::Pin;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -46,24 +46,27 @@ impl FakeCluster {
     }
 
     pub fn jobs(&self) -> Vec<Job> {
-        self.lock().values().map(|fake| fake.job.clone()).collect()
+        lock(&self.jobs)
+            .values()
+            .map(|fake| fake.job.clone())
+            .collect()
     }
 
     pub fn set_phase(&self, job: &JobName, phase: JobPhase) {
-        if let Some(fake) = self.lock().get_mut(job) {
+        if let Some(fake) = lock(&self.jobs).get_mut(job) {
             fake.phase = phase;
         }
     }
 
     pub fn fail(&self, job: &JobName, reason: &str) {
-        if let Some(fake) = self.lock().get_mut(job) {
+        if let Some(fake) = lock(&self.jobs).get_mut(job) {
             fake.phase = JobPhase::Failed;
             fake.failed_reason = Some(reason.to_owned());
         }
     }
 
     pub fn set_pod(&self, job: &JobName, state: PodState, log: &str) {
-        if let Some(fake) = self.lock().get_mut(job) {
+        if let Some(fake) = lock(&self.jobs).get_mut(job) {
             fake.pod = Some(FakePod {
                 state,
                 log: log.to_owned(),
@@ -72,31 +75,15 @@ impl FakeCluster {
     }
 
     pub fn secret(&self, name: &SecretName) -> Option<SecretData> {
-        self.lock_secrets().get(name).cloned()
+        lock(&self.secrets).get(name).cloned()
     }
 
     pub fn secret_owner(&self, name: &SecretName) -> Option<CreatedJob> {
-        self.secret_owners
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(name)
-            .cloned()
+        lock(&self.secret_owners).get(name).cloned()
     }
 
     pub fn uid_of(job: &JobName) -> JobUid {
         JobUid::new(format!("uid-of-{}", job.as_str()))
-    }
-
-    fn lock_secrets(&self) -> std::sync::MutexGuard<'_, BTreeMap<SecretName, SecretData>> {
-        self.secrets
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<JobName, FakeJob>> {
-        self.jobs
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
@@ -105,7 +92,7 @@ impl Cluster for FakeCluster {
         async move {
             tokio::time::sleep(self.create_time).await;
             let name = JobName::new(job.metadata.name.clone().ok_or(ClusterError::NoName)?);
-            let mut jobs = self.lock();
+            let mut jobs = lock(&self.jobs);
             if jobs.contains_key(&name) {
                 return Err(ClusterError::Exists(name));
             }
@@ -128,8 +115,7 @@ impl Cluster for FakeCluster {
         &'a self,
         labels: &'a [(&'a str, &'a str)],
     ) -> BoxFuture<'a, Result<Vec<JobState>, ClusterError>> {
-        let states = self
-            .lock()
+        let states = lock(&self.jobs)
             .iter()
             .map(|(name, fake)| job_state(name, fake))
             .filter(|state| {
@@ -145,7 +131,7 @@ impl Cluster for FakeCluster {
         &'a self,
         job: &'a JobName,
     ) -> BoxFuture<'a, Result<Option<JobState>, ClusterError>> {
-        let state = self.lock().get(job).map(|fake| job_state(job, fake));
+        let state = lock(&self.jobs).get(job).map(|fake| job_state(job, fake));
         ready(Ok(state)).boxed()
     }
 
@@ -153,8 +139,7 @@ impl Cluster for FakeCluster {
         &'a self,
         job: &'a JobName,
     ) -> BoxFuture<'a, Result<Option<PodState>, ClusterError>> {
-        let pod = self
-            .lock()
+        let pod = lock(&self.jobs)
             .get(job)
             .and_then(|fake| fake.pod.as_ref())
             .map(|pod| pod.state.clone());
@@ -166,7 +151,7 @@ impl Cluster for FakeCluster {
         pod: &'a PodName,
         follow: bool,
     ) -> BoxFuture<'a, Result<LogReader, ClusterError>> {
-        let found = self.lock().values().find_map(|fake| {
+        let found = lock(&self.jobs).values().find_map(|fake| {
             let found = fake.pod.as_ref().filter(|found| found.state.name == *pod)?;
             Some((fake.phase, found.log.clone()))
         });
@@ -177,7 +162,7 @@ impl Cluster for FakeCluster {
     }
 
     fn delete_job<'a>(&'a self, job: &'a JobName) -> BoxFuture<'a, Result<(), ClusterError>> {
-        self.lock().remove(job);
+        lock(&self.jobs).remove(job);
         ready(Ok(())).boxed()
     }
 
@@ -187,7 +172,7 @@ impl Cluster for FakeCluster {
         key: &'a str,
         value: &'a str,
     ) -> BoxFuture<'a, Result<(), ClusterError>> {
-        self.lock_secrets()
+        lock(&self.secrets)
             .entry(secret.clone())
             .or_default()
             .insert(key.to_owned(), value.to_owned());
@@ -199,8 +184,7 @@ impl Cluster for FakeCluster {
         secret: &'a SecretName,
         key: &'a str,
     ) -> BoxFuture<'a, Result<bool, ClusterError>> {
-        let deleted = self
-            .lock_secrets()
+        let deleted = lock(&self.secrets)
             .get_mut(secret)
             .is_some_and(|data| data.remove(key).is_some());
         ready(Ok(deleted)).boxed()
@@ -215,10 +199,7 @@ impl Cluster for FakeCluster {
     ) -> BoxFuture<'a, Result<(), ClusterError>> {
         async move {
             self.write_secret_key(secret, key, value).await?;
-            self.secret_owners
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .insert(secret.clone(), owner.clone());
+            lock(&self.secret_owners).insert(secret.clone(), owner.clone());
             Ok(())
         }
         .boxed()
@@ -231,6 +212,10 @@ fn log_reader(log: String, still_running: bool) -> LogReader {
         return Box::pin(BufReader::new(written.chain(StillRunning)));
     }
     Box::pin(written)
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 struct StillRunning;
