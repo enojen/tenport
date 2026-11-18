@@ -187,7 +187,7 @@ fn started_pod(log: &str, run: &str) -> (JobName, PodState, String) {
     let state = PodState {
         name: PodName::new(format!("{run}-abcde")),
         started: true,
-        reason: None,
+        box_reason: None,
         exit_code: None,
         pod_reason: None,
     };
@@ -239,7 +239,7 @@ async fn a_run_gives_its_fields_and_the_phase_and_reason_of_its_job() {
     let pod = PodState {
         name: PodName::new(format!("{name}-abcde")),
         started: true,
-        reason: Some("OOMKilled".to_owned()),
+        box_reason: Some("OOMKilled".to_owned()),
         exit_code: None,
         pod_reason: None,
     };
@@ -333,7 +333,7 @@ async fn the_log_of_a_run_whose_box_has_not_started_is_a_conflict_with_the_reaso
     let pod = PodState {
         name: PodName::new(format!("{name}-abcde")),
         started: false,
-        reason: Some("CreateContainerConfigError".to_owned()),
+        box_reason: Some("CreateContainerConfigError".to_owned()),
         exit_code: None,
         pod_reason: None,
     };
@@ -454,14 +454,14 @@ tenbox-boot: home saved to the task archive: 8.5M
 ";
 
 struct BoxEnd<'a> {
-    reason: &'a str,
+    box_reason: &'a str,
     exit_code: i32,
     pod_reason: Option<&'a str>,
     log: &'a str,
 }
 
 const COMPLETED: BoxEnd = BoxEnd {
-    reason: "Completed",
+    box_reason: "Completed",
     exit_code: 0,
     pod_reason: None,
     log: BUILD_LOG,
@@ -474,7 +474,7 @@ async fn ended_run(server: &TestServer, token: &Token, phase: JobPhase, end: Box
     let pod = PodState {
         name: PodName::new(format!("{name}-abcde")),
         started: true,
-        reason: Some(end.reason.to_owned()),
+        box_reason: Some(end.box_reason.to_owned()),
         exit_code: Some(end.exit_code),
         pod_reason: end.pod_reason.map(str::to_owned),
     };
@@ -537,7 +537,7 @@ async fn a_box_killed_for_memory_ends_oom_killed_with_exit_code_137() {
     let server = TestServer::start().await;
     let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let end = BoxEnd {
-        reason: "OOMKilled",
+        box_reason: "OOMKilled",
         exit_code: 137,
         pod_reason: None,
         log: "tenbox-boot: ready\n",
@@ -556,7 +556,7 @@ async fn an_evicted_pod_ends_evicted_not_error() {
     let server = TestServer::start().await;
     let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let end = BoxEnd {
-        reason: "Error",
+        box_reason: "Error",
         exit_code: 137,
         pod_reason: Some("Evicted"),
         log: "",
@@ -573,7 +573,7 @@ async fn a_job_past_its_deadline_ends_deadline_exceeded() {
     let server = TestServer::start().await;
     let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let end = BoxEnd {
-        reason: "Error",
+        box_reason: "Error",
         exit_code: 137,
         pod_reason: None,
         log: "",

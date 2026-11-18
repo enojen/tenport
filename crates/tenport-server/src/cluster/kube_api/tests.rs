@@ -88,7 +88,10 @@ fn a_pending_pod_tells_why_the_box_waits() {
     let pod = pod_with("p", 1, "Pending", vec![container("box", waiting)]);
     let state = pod_state(&pod).unwrap();
     assert!(!state.started);
-    assert_eq!(state.reason.as_deref(), Some("CreateContainerConfigError"));
+    assert_eq!(
+        state.box_reason.as_deref(),
+        Some("CreateContainerConfigError")
+    );
 }
 
 #[test]
@@ -106,7 +109,7 @@ fn the_reason_is_the_box_containers_not_the_sidecars() {
     ];
     let state = pod_state(&pod_with("p", 1, "Failed", statuses)).unwrap();
     assert!(state.started);
-    assert_eq!(state.reason.as_deref(), Some("OOMKilled"));
+    assert_eq!(state.box_reason.as_deref(), Some("OOMKilled"));
 }
 
 #[test]
@@ -205,7 +208,7 @@ fn an_ended_box_gives_its_exit_code_and_an_evicted_pod_its_reason() {
     let state = pod_state(&pod).unwrap();
     assert_eq!(state.exit_code, Some(137));
     assert_eq!(state.pod_reason.as_deref(), Some("Evicted"));
-    assert_eq!(state.reason.as_deref(), Some("Error"));
+    assert_eq!(state.box_reason.as_deref(), Some("Error"));
 }
 
 #[test]

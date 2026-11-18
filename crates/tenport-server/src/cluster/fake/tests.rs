@@ -60,7 +60,7 @@ async fn the_log_of_a_pod_is_read() {
     let pod = PodState {
         name: PodName::new("a-x"),
         started: true,
-        reason: None,
+        box_reason: None,
         exit_code: None,
         pod_reason: None,
     };

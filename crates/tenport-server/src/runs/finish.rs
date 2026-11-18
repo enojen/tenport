@@ -99,7 +99,7 @@ impl Runs {
         Ok(RunState {
             run,
             phase: RunPhase::Running,
-            reason: pod.and_then(|pod| pod.reason),
+            reason: pod.and_then(|pod| pod.box_reason),
             exit_code: None,
             oom_kill: None,
             output: None,
@@ -173,7 +173,7 @@ fn finished_reason(job: &JobState, pod: Option<&PodState>) -> Option<String> {
         .filter(|reason| reason != BACKOFF_LIMIT_EXCEEDED);
     job_reason
         .or_else(|| pod.and_then(|pod| pod.pod_reason.clone()))
-        .or_else(|| pod.and_then(|pod| pod.reason.clone()))
+        .or_else(|| pod.and_then(|pod| pod.box_reason.clone()))
 }
 
 fn command_output(log: &str) -> Option<Value> {

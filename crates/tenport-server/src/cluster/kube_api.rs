@@ -334,7 +334,7 @@ fn pod_state(pod: &Pod) -> Option<PodState> {
     Some(PodState {
         name,
         started,
-        reason: box_status.and_then(box_reason),
+        box_reason: box_status.and_then(box_reason),
         exit_code: box_status.and_then(box_exit_code),
         pod_reason: status.and_then(|status| status.reason.clone()),
     })

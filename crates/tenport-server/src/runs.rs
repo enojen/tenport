@@ -235,7 +235,7 @@ impl Runs {
             Some(pod) if pod.started => Ok(pod),
             pod => Err(RunsError::NotStarted {
                 run: run.name.clone(),
-                reason: pod.and_then(|pod| pod.reason),
+                reason: pod.and_then(|pod| pod.box_reason),
             }),
         }
     }

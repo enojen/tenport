@@ -87,7 +87,7 @@ impl JobState {
 pub struct PodState {
     pub name: PodName,
     pub started: bool,
-    pub reason: Option<String>,
+    pub box_reason: Option<String>,
     pub exit_code: Option<i32>,
     pub pod_reason: Option<String>,
 }
