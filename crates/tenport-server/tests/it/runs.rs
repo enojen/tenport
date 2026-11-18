@@ -31,7 +31,7 @@ async fn project_named(server: &TestServer, token: &Token, name: &str) -> String
         .post(server.url("/projects"))
         .bearer_auth(token.expose())
         .json(
-            &json!({ "org": me["organizations"][0]["id"], "name": name, "repo": "enojen/tenport" }),
+            &json!({ "organization": me["organizations"][0]["id"], "name": name, "repo": "enojen/tenport" }),
         )
         .send()
         .await
@@ -69,7 +69,7 @@ pub async fn post_run(server: &TestServer, token: &Token, body: &Value) -> reqwe
 #[tokio::test]
 async fn a_member_starts_a_run_and_tenport_creates_its_job() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     let response = post_run(&server, &token, &build(&project)).await;
     assert_eq!(response.status(), StatusCode::CREATED);
@@ -92,7 +92,7 @@ fn box_env(job: &Job, name: &str) -> String {
 #[tokio::test]
 async fn the_job_of_a_run_gets_a_get_and_a_put_url_for_the_task_archive() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
 
     let response = post_run(&server, &token, &build(&project)).await;
@@ -111,7 +111,7 @@ async fn the_job_of_a_run_gets_a_get_and_a_put_url_for_the_task_archive() {
 #[tokio::test]
 async fn a_command_that_is_not_a_tenbox_command_of_the_task_is_a_bad_request() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     let mut body = build(&project);
     body["command"] = json!(["bash", "-c", "curl evil"]);
@@ -123,7 +123,7 @@ async fn a_command_that_is_not_a_tenbox_command_of_the_task_is_a_bad_request() {
 #[tokio::test]
 async fn a_second_run_while_the_first_runs_is_machine_busy() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     let first = post_run(&server, &token, &build(&project)).await;
     assert_eq!(first.status(), StatusCode::CREATED);
@@ -136,7 +136,7 @@ async fn a_second_run_while_the_first_runs_is_machine_busy() {
 #[tokio::test]
 async fn an_unknown_class_is_a_bad_request() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     let mut body = build(&project);
     body["class"] = json!("huge");
@@ -147,8 +147,8 @@ async fn an_unknown_class_is_a_bad_request() {
 #[tokio::test]
 async fn a_user_of_another_organization_is_forbidden() {
     let server = TestServer::start().await;
-    let owner = server.register("Wegobi", "enojen", Role::Admin).await;
-    let stranger = server.register("Other", "someone", Role::Admin).await;
+    let owner = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let stranger = server.add_user("Other", "someone", Role::Admin).await;
     let project = project_of(&server, &owner).await;
     let response = post_run(&server, &stranger, &build(&project)).await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -197,7 +197,7 @@ fn started_pod(log: &str, run: &str) -> (JobName, PodState, String) {
 #[tokio::test]
 async fn the_runs_of_a_task_list_the_started_run_as_running() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (project, name) = started_run(&server, &token).await;
     let response = get(
         &server,
@@ -215,7 +215,7 @@ async fn the_runs_of_a_task_list_the_started_run_as_running() {
 #[tokio::test]
 async fn the_runs_of_another_task_are_empty() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (project, _) = started_run(&server, &token).await;
     let runs: Value = get(
         &server,
@@ -232,7 +232,7 @@ async fn the_runs_of_another_task_are_empty() {
 #[tokio::test]
 async fn a_run_gives_its_fields_and_the_phase_and_reason_of_its_job() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (project, name) = started_run(&server, &token).await;
     let job = JobName::new(&name);
     server.cluster.set_phase(&job, JobPhase::Failed);
@@ -260,7 +260,7 @@ async fn a_run_gives_its_fields_and_the_phase_and_reason_of_its_job() {
 #[tokio::test]
 async fn a_run_whose_job_went_before_its_end_was_seen_is_unknown() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (_, name) = started_run(&server, &token).await;
     server
         .cluster
@@ -276,7 +276,7 @@ async fn a_run_whose_job_went_before_its_end_was_seen_is_unknown() {
 #[tokio::test]
 async fn an_unknown_run_is_not_found() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     for path in ["/runs/task-x-1", "/runs/task-x-1/log"] {
         assert_unknown_run(get(&server, &token, path).await).await;
     }
@@ -293,8 +293,8 @@ async fn assert_unknown_run(response: reqwest::Response) {
 #[tokio::test]
 async fn a_user_of_another_organization_cannot_see_or_stop_a_run() {
     let server = TestServer::start().await;
-    let owner = server.register("Wegobi", "enojen", Role::Admin).await;
-    let stranger = server.register("Other", "someone", Role::Admin).await;
+    let owner = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let stranger = server.add_user("Other", "someone", Role::Admin).await;
     let (project, name) = started_run(&server, &owner).await;
     let paths = [
         format!("/runs?project={project}&task=TEN-301"),
@@ -313,7 +313,7 @@ async fn a_user_of_another_organization_cannot_see_or_stop_a_run() {
 #[tokio::test]
 async fn the_log_of_a_run_is_the_plain_text_of_its_box_container() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (_, name) = started_run(&server, &token).await;
     let (job, pod, log) = started_pod("cloning\nbuilding\n", &name);
     server.cluster.set_pod(&job, pod, &log);
@@ -328,7 +328,7 @@ async fn the_log_of_a_run_is_the_plain_text_of_its_box_container() {
 #[tokio::test]
 async fn the_log_of_a_run_whose_box_has_not_started_is_a_conflict_with_the_reason() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (_, name) = started_run(&server, &token).await;
     let pod = PodState {
         name: PodName::new(format!("{name}-abcde")),
@@ -350,7 +350,7 @@ async fn the_log_of_a_run_whose_box_has_not_started_is_a_conflict_with_the_reaso
 #[tokio::test]
 async fn the_log_of_a_stopped_run_is_a_conflict_that_says_the_job_is_gone() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (_, name) = started_run(&server, &token).await;
     delete(&server, &token, &format!("/runs/{name}")).await;
     let response = get(&server, &token, &format!("/runs/{name}/log")).await;
@@ -365,7 +365,7 @@ async fn the_log_of_a_stopped_run_is_a_conflict_that_says_the_job_is_gone() {
 #[tokio::test]
 async fn a_run_is_recorded_when_the_client_leaves_before_the_answer() {
     let server = TestServer::start_on(FakeCluster::with_create_time(CREATE_TIME)).await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     let left = reqwest::Client::builder()
         .timeout(CREATE_TIME / 3)
@@ -394,7 +394,7 @@ async fn a_run_is_recorded_when_the_client_leaves_before_the_answer() {
 #[tokio::test]
 async fn a_project_name_that_is_not_a_label_value_reaches_the_job_as_one() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_named(&server, &token, " Ödev  takibi: v2 ").await;
 
     let response = post_run(&server, &token, &build(&project)).await;
@@ -408,7 +408,7 @@ async fn a_project_name_that_is_not_a_label_value_reaches_the_job_as_one() {
 #[tokio::test]
 async fn a_project_name_with_no_label_character_reaches_the_job_as_its_id() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_named(&server, &token, "ğüş").await;
 
     let response = post_run(&server, &token, &build(&project)).await;
@@ -422,7 +422,7 @@ async fn a_project_name_with_no_label_character_reaches_the_job_as_its_id() {
 #[tokio::test]
 async fn the_job_of_a_run_gets_its_own_placeholder_in_a_secret_that_goes_with_the_job() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
 
     let response = post_run(&server, &token, &build(&project)).await;
@@ -493,7 +493,7 @@ async fn run_of(server: &TestServer, token: &Token, name: &str) -> Value {
 #[tokio::test]
 async fn an_ended_run_gives_the_output_of_its_command() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let name = ended_run(&server, &token, JobPhase::Succeeded, COMPLETED).await;
     let run = run_of(&server, &token, &name).await;
     assert_eq!(run["phase"], "Succeeded");
@@ -506,7 +506,7 @@ async fn an_ended_run_gives_the_output_of_its_command() {
 #[tokio::test]
 async fn an_ended_run_keeps_its_phase_reason_and_output_after_its_job_is_gone() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let name = ended_run(&server, &token, JobPhase::Failed, COMPLETED).await;
     get(&server, &token, &format!("/runs/{name}")).await;
     delete(&server, &token, &format!("/runs/{name}")).await;
@@ -520,7 +520,7 @@ async fn an_ended_run_keeps_its_phase_reason_and_output_after_its_job_is_gone() 
 #[tokio::test]
 async fn a_run_counts_the_processes_killed_for_memory_and_still_succeeds() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let log = BUILD_LOG.replace("oom_kill 0", "oom_kill 2");
     let end = BoxEnd {
         log: &log,
@@ -535,7 +535,7 @@ async fn a_run_counts_the_processes_killed_for_memory_and_still_succeeds() {
 #[tokio::test]
 async fn a_box_killed_for_memory_ends_oom_killed_with_exit_code_137() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let end = BoxEnd {
         reason: "OOMKilled",
         exit_code: 137,
@@ -554,7 +554,7 @@ async fn a_box_killed_for_memory_ends_oom_killed_with_exit_code_137() {
 #[tokio::test]
 async fn an_evicted_pod_ends_evicted_not_error() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let end = BoxEnd {
         reason: "Error",
         exit_code: 137,
@@ -571,7 +571,7 @@ async fn an_evicted_pod_ends_evicted_not_error() {
 #[tokio::test]
 async fn a_job_past_its_deadline_ends_deadline_exceeded() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let end = BoxEnd {
         reason: "Error",
         exit_code: 137,
@@ -590,7 +590,7 @@ async fn a_job_past_its_deadline_ends_deadline_exceeded() {
 #[tokio::test]
 async fn a_stopped_run_ends_failed_and_stopped() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (_, name) = started_run(&server, &token).await;
     let response = delete(&server, &token, &format!("/runs/{name}")).await;
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
@@ -603,7 +603,7 @@ async fn a_stopped_run_ends_failed_and_stopped() {
 #[tokio::test]
 async fn stopping_an_ended_run_keeps_its_own_end() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let name = ended_run(&server, &token, JobPhase::Succeeded, COMPLETED).await;
     delete(&server, &token, &format!("/runs/{name}")).await;
     let run = run_of(&server, &token, &name).await;
@@ -614,7 +614,7 @@ async fn stopping_an_ended_run_keeps_its_own_end() {
 #[tokio::test]
 async fn a_running_run_has_no_output_yet() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (_, name) = started_run(&server, &token).await;
     let run = run_of(&server, &token, &name).await;
     assert_eq!(run["phase"], "Running");

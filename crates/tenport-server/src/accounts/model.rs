@@ -11,7 +11,7 @@ const TOKEN_PREFIX: &str = "tbx_";
 const TOKEN_BYTES: usize = 32;
 const GITHUB_LOGIN_MAX: usize = 39;
 
-short_id!(OrgId, "o-", "an organization id");
+short_id!(OrganizationId, "o-", "an organization id");
 short_id!(UserId, "u-", "a user id");
 short_id!(TokenId, "t-", "a token id");
 
@@ -85,15 +85,6 @@ pub enum Role {
     Member,
 }
 
-impl Role {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Admin => "admin",
-            Self::Member => "member",
-        }
-    }
-}
-
 pub struct Token(String);
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -145,7 +136,7 @@ impl TokenHash {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct User {
     pub id: UserId,
     pub name: Name,
@@ -153,10 +144,10 @@ pub struct User {
     pub github: GithubLogin,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Membership {
-    pub org: OrgId,
-    pub org_name: Name,
+    pub organization: OrganizationId,
+    pub organization_name: Name,
     pub role: Role,
 }
 
@@ -195,7 +186,7 @@ impl AccountsEvent {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrganizationAdded {
-    pub id: OrgId,
+    pub id: OrganizationId,
     pub name: Name,
 }
 
@@ -209,7 +200,7 @@ pub struct UserAdded {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemberAdded {
-    pub org: OrgId,
+    pub organization: OrganizationId,
     pub user: UserId,
     pub role: Role,
 }

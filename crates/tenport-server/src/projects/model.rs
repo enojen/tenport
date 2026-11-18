@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 
-use crate::accounts::OrgId;
+use crate::accounts::OrganizationId;
 use crate::cluster::SecretName;
 use crate::id::short_id;
 use crate::name::{Name, parsed_text};
@@ -56,7 +56,7 @@ parsed_text!(Repo, RepoError);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {
     pub id: ProjectId,
-    pub org: OrgId,
+    pub organization: OrganizationId,
     pub name: Name,
     pub repo: Repo,
 }
@@ -94,7 +94,7 @@ impl ProjectsEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectAdded {
     pub id: ProjectId,
-    pub org: OrgId,
+    pub organization: OrganizationId,
     pub name: Name,
     pub repo: Repo,
 }
@@ -103,7 +103,7 @@ impl From<ProjectAdded> for Project {
     fn from(added: ProjectAdded) -> Self {
         Self {
             id: added.id,
-            org: added.org,
+            organization: added.organization,
             name: added.name,
             repo: added.repo,
         }

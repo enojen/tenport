@@ -4,7 +4,7 @@ use tenport_server::accounts::{Role, Token};
 
 use crate::server::TestServer;
 
-async fn org_of(server: &TestServer, token: &Token) -> String {
+async fn organization_of(server: &TestServer, token: &Token) -> String {
     let me: Value = reqwest::Client::new()
         .get(server.url("/me"))
         .bearer_auth(token.expose())
@@ -42,17 +42,17 @@ async fn get_projects(server: &TestServer, token: &Token) -> Value {
 #[tokio::test]
 async fn an_admin_adds_a_project_and_lists_it() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
-    let org = org_of(&server, &token).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let organization = organization_of(&server, &token).await;
     let response = post_project(
         &server,
         &token,
-        json!({ "org": org, "name": "Tenport", "repo": "enojen/tenport" }),
+        json!({ "organization": organization, "name": "Tenport", "repo": "enojen/tenport" }),
     )
     .await;
     assert_eq!(response.status(), StatusCode::CREATED);
     let project: Value = response.json().await.unwrap();
-    assert_eq!(project["org"], org.as_str());
+    assert_eq!(project["organization"], organization.as_str());
     assert_eq!(project["repo"], "enojen/tenport");
     assert_eq!(project["id"].as_str().unwrap().len(), 6);
     assert_eq!(get_projects(&server, &token).await, json!([project]));
@@ -61,13 +61,13 @@ async fn an_admin_adds_a_project_and_lists_it() {
 #[tokio::test]
 async fn a_member_is_forbidden_to_add_a_project() {
     let server = TestServer::start().await;
-    let admin = server.register("Wegobi", "enojen", Role::Admin).await;
-    let member = server.register("Wegobi", "ali", Role::Member).await;
-    let org = org_of(&server, &member).await;
+    let admin = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let member = server.add_user("Wegobi", "ali", Role::Member).await;
+    let organization = organization_of(&server, &member).await;
     let response = post_project(
         &server,
         &member,
-        json!({ "org": org, "name": "Tenport", "repo": "enojen/tenport" }),
+        json!({ "organization": organization, "name": "Tenport", "repo": "enojen/tenport" }),
     )
     .await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
@@ -79,12 +79,12 @@ async fn a_member_is_forbidden_to_add_a_project() {
 #[tokio::test]
 async fn a_bad_repo_is_a_bad_request() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
-    let org = org_of(&server, &token).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let organization = organization_of(&server, &token).await;
     let response = post_project(
         &server,
         &token,
-        json!({ "org": org, "name": "Tenport", "repo": "tenport" }),
+        json!({ "organization": organization, "name": "Tenport", "repo": "tenport" }),
     )
     .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);

@@ -45,8 +45,8 @@ pub async fn me(
     let organizations = memberships
         .into_iter()
         .map(|membership| MyOrganization {
-            id: membership.org.to_string(),
-            name: membership.org_name.into(),
+            id: membership.organization.to_string(),
+            name: membership.organization_name.into(),
             role: membership.role,
         })
         .collect();

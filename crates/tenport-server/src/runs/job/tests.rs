@@ -3,7 +3,7 @@ use std::path::Path;
 use k8s_openapi::api::core::v1::{Container, PodSpec};
 
 use super::*;
-use crate::accounts::OrgId;
+use crate::accounts::OrganizationId;
 use crate::name::Name;
 use crate::projects::{ProjectId, Repo};
 
@@ -173,7 +173,7 @@ fn the_run_stamp_is_month_day_and_time_in_utc() {
 fn project_named(name: &str) -> Project {
     Project {
         id: ProjectId::parse("7ihtah").unwrap(),
-        org: OrgId::parse("o-5bt4rj").unwrap(),
+        organization: OrganizationId::parse("o-5bt4rj").unwrap(),
         name: Name::parse(name).unwrap(),
         repo: Repo::parse("enojen/tenport").unwrap(),
     }

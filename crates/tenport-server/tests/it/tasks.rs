@@ -52,8 +52,8 @@ async fn event_types(server: &TestServer) -> Vec<String> {
 #[tokio::test]
 async fn a_member_deletes_a_task_and_its_archive_and_a_second_delete_finds_it_missing() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Member).await;
-    let admin = server.register("Wegobi", "veli", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Member).await;
+    let admin = server.add_user("Wegobi", "veli", Role::Admin).await;
     let project = project_of(&server, &admin).await;
     server.bucket.put(&archive_key(&project));
 
@@ -79,7 +79,7 @@ async fn a_member_deletes_a_task_and_its_archive_and_a_second_delete_finds_it_mi
 #[tokio::test]
 async fn a_task_with_a_running_job_is_machine_busy_and_keeps_its_archive() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     server.bucket.put(&archive_key(&project));
     let run = post_run(&server, &token, &build(&project)).await;
@@ -103,8 +103,8 @@ async fn a_task_with_a_running_job_is_machine_busy_and_keeps_its_archive() {
 #[tokio::test]
 async fn a_user_of_another_organization_is_forbidden_and_the_archive_stays() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
-    let stranger = server.register("Other", "veli", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let stranger = server.add_user("Other", "veli", Role::Admin).await;
     let project = project_of(&server, &token).await;
     server.bucket.put(&archive_key(&project));
 
@@ -117,7 +117,7 @@ async fn a_user_of_another_organization_is_forbidden_and_the_archive_stays() {
 #[tokio::test]
 async fn a_deleted_task_can_start_again() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     let started = post_events(
         &server,
@@ -142,7 +142,7 @@ async fn a_deleted_task_can_start_again() {
 #[tokio::test]
 async fn a_client_cannot_send_task_deleted_as_an_event() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
 
     let response = post_events(

@@ -22,7 +22,7 @@ async fn problem(response: reqwest::Response) -> Value {
 #[tokio::test]
 async fn a_method_a_path_does_not_have_is_a_problem() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let response = reqwest::Client::new()
         .put(server.url("/runs"))
         .bearer_auth(token.expose())
@@ -36,7 +36,7 @@ async fn a_method_a_path_does_not_have_is_a_problem() {
 #[tokio::test]
 async fn a_body_over_the_limit_is_payload_too_large() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let response = reqwest::Client::new()
         .post(server.url("/events"))
         .bearer_auth(token.expose())
@@ -52,7 +52,7 @@ async fn a_body_over_the_limit_is_payload_too_large() {
 #[tokio::test]
 async fn an_empty_project_id_is_a_bad_request() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let response = get(&server, &token, "/runs?project=&task=TEN-1").await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
@@ -60,7 +60,7 @@ async fn an_empty_project_id_is_a_bad_request() {
 #[tokio::test]
 async fn a_bad_query_says_only_what_is_wrong() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let response = get(&server, &token, "/runs?task=TEN-1").await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let detail = problem(response).await["detail"]
@@ -73,7 +73,7 @@ async fn a_bad_query_says_only_what_is_wrong() {
 #[tokio::test]
 async fn a_user_over_the_request_rate_gets_too_many_requests_with_retry_after() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let answers = join_all((0..30).map(|_| get(&server, &token, "/me"))).await;
     let refused: Vec<&reqwest::Response> = answers
         .iter()
@@ -81,7 +81,7 @@ async fn a_user_over_the_request_rate_gets_too_many_requests_with_retry_after() 
         .collect();
     assert!(!refused.is_empty());
     assert!(refused[0].headers().contains_key(RETRY_AFTER));
-    let other = server.register("Other", "someone", Role::Admin).await;
+    let other = server.add_user("Other", "someone", Role::Admin).await;
     assert_eq!(get(&server, &other, "/me").await.status(), StatusCode::OK);
 }
 
@@ -93,7 +93,7 @@ async fn a_request_over_the_time_limit_is_a_timeout() {
     };
     let cluster = FakeCluster::with_create_time(Duration::from_secs(5));
     let server = TestServer::start_with(cluster, limits).await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     let response = post_run(&server, &token, &build(&project)).await;
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -108,7 +108,7 @@ async fn requests_over_the_concurrent_limit_wait_for_a_free_place() {
     };
     let cluster = FakeCluster::with_create_time(Duration::from_millis(400));
     let server = TestServer::start_with(cluster, limits).await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     let body = build(&project);
     let slow = post_run(&server, &token, &body);
@@ -126,7 +126,7 @@ async fn requests_over_the_concurrent_limit_wait_for_a_free_place() {
 #[tokio::test]
 async fn a_user_opens_five_followed_logs_at_most() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let (_, name) = started_run(&server, &token).await;
     let pod = PodState {
         name: PodName::new(format!("{name}-abcde")),
@@ -151,18 +151,18 @@ async fn a_user_opens_five_followed_logs_at_most() {
     assert_eq!(problem(refused).await["code"], "too-many-log-streams");
 }
 
-async fn add_project(server: &TestServer, token: &Token, org: &str, name: &str) {
+async fn add_project(server: &TestServer, token: &Token, organization: &str, name: &str) {
     let response = reqwest::Client::new()
         .post(server.url("/projects"))
         .bearer_auth(token.expose())
-        .json(&json!({ "org": org, "name": name, "repo": "enojen/tenport" }))
+        .json(&json!({ "organization": organization, "name": name, "repo": "enojen/tenport" }))
         .send()
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
 }
 
-async fn org_of(server: &TestServer, token: &Token) -> String {
+async fn organization_of(server: &TestServer, token: &Token) -> String {
     let me: Value = get(server, token, "/me").await.json().await.unwrap();
     me["organizations"][0]["id"].as_str().unwrap().to_owned()
 }
@@ -186,10 +186,10 @@ fn names(list: &Value) -> Vec<&str> {
 #[tokio::test]
 async fn the_projects_come_in_pages_with_a_link_to_the_next() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
-    let org = org_of(&server, &token).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let organization = organization_of(&server, &token).await;
     for name in ["Alpha", "Beta", "Gamma"] {
-        add_project(&server, &token, &org, name).await;
+        add_project(&server, &token, &organization, name).await;
     }
     let first = get(&server, &token, "/projects?limit=2").await;
     let next = next_link(&first).unwrap();
@@ -204,9 +204,9 @@ async fn the_projects_come_in_pages_with_a_link_to_the_next() {
 #[tokio::test]
 async fn a_list_without_limit_is_one_page_of_fifty() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
-    let org = org_of(&server, &token).await;
-    add_project(&server, &token, &org, "Alpha").await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let organization = organization_of(&server, &token).await;
+    add_project(&server, &token, &organization, "Alpha").await;
     let response = get(&server, &token, "/projects").await;
     assert!(next_link(&response).is_none());
     let list: Value = response.json().await.unwrap();
@@ -216,7 +216,7 @@ async fn a_list_without_limit_is_one_page_of_fifty() {
 #[tokio::test]
 async fn a_limit_out_of_range_is_a_bad_request() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     for limit in ["0", "101", "x"] {
         let response = get(&server, &token, &format!("/projects?limit={limit}")).await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{limit}");
@@ -240,7 +240,7 @@ async fn record_run(server: &TestServer, project: &str, run: &str) {
 #[tokio::test]
 async fn the_runs_of_a_task_come_in_pages_with_a_link_to_the_next() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&server, &token).await;
     for run in ["task-ten-301-a", "task-ten-301-b", "task-ten-301-c"] {
         record_run(&server, &project, run).await;

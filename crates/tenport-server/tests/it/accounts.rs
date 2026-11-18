@@ -7,7 +7,7 @@ use crate::server::TestServer;
 #[tokio::test]
 async fn me_names_the_user_of_the_token_and_their_organizations() {
     let server = TestServer::start().await;
-    let token = server.register("Wegobi", "enojen", Role::Admin).await;
+    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
     let response = reqwest::Client::new()
         .get(server.url("/me"))
         .bearer_auth(token.expose())
@@ -33,7 +33,7 @@ async fn me_without_a_token_is_unauthorized() {
 #[tokio::test]
 async fn me_with_an_unknown_token_is_unauthorized() {
     let server = TestServer::start().await;
-    server.register("Wegobi", "enojen", Role::Admin).await;
+    server.add_user("Wegobi", "enojen", Role::Admin).await;
     let response = reqwest::Client::new()
         .get(server.url("/me"))
         .bearer_auth("tbx_unknown")

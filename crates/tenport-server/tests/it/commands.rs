@@ -6,7 +6,16 @@ use tenport_server::accounts::{self, Token};
 use tenport_server::db;
 
 const ADD_AYSE: [&str; 10] = [
-    "user", "add", "--name", "Ayse", "--github", "ayse", "--org", "demo", "--role", "admin",
+    "user",
+    "add",
+    "--name",
+    "Ayse",
+    "--github",
+    "ayse",
+    "--organization",
+    "demo",
+    "--role",
+    "admin",
 ];
 
 fn tenport(dir: &TempDir, args: &[&str]) -> Output {

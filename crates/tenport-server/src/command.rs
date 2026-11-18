@@ -1,24 +1,20 @@
 use std::collections::HashMap;
 
-use crate::accounts::{
-    self, AccountsError, Email, GithubLogin, NewUser, OrgId, Registration, Role, UserId,
-};
-use crate::db::Db;
-use crate::events::Actor;
+use crate::accounts::{Email, GithubLogin, NewUser, Role};
 use crate::name::Name;
 
 #[cfg(test)]
 mod tests;
 
 pub const USAGE: &str = "usage: tenport
-       tenport user add --name <name> --github <login> --org <org> [--email <email>] [--role admin|member]";
+       tenport user add --name <name> --github <login> --organization <organization> [--email <email>] [--role admin|member]";
 
 const TOKEN_NAME: &str = "user add";
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Command {
     Serve,
-    UserAdd(Registration),
+    UserAdd(NewUser),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -46,19 +42,20 @@ pub fn parse(args: &[String]) -> Result<Command, CommandError> {
 }
 
 fn user_add(args: &[String]) -> Result<Command, CommandError> {
-    let mut flags = Flags::read(args, &["--name", "--github", "--org", "--email", "--role"])?;
+    let mut flags = Flags::read(
+        args,
+        &["--name", "--github", "--organization", "--email", "--role"],
+    )?;
     let name = flags.required("--name", Name::parse)?;
     let github = flags.required("--github", GithubLogin::parse)?;
-    let org = flags.required("--org", Name::parse)?;
+    let organization_name = flags.required("--organization", Name::parse)?;
     let email = flags.optional("--email", Email::parse)?;
     let role = flags.optional("--role", role)?.unwrap_or(Role::Member);
-    Ok(Command::UserAdd(Registration {
-        org,
-        user: NewUser {
-            name,
-            email,
-            github,
-        },
+    Ok(Command::UserAdd(NewUser {
+        organization_name,
+        name,
+        email,
+        github,
         role,
         token_name: Name::parse(TOKEN_NAME).expect("the token name is a name"),
     }))
@@ -117,23 +114,4 @@ impl<'a> Flags<'a> {
         self.optional(flag, parse)?
             .ok_or(CommandError::Missing(flag))
     }
-}
-
-#[derive(Debug, serde::Serialize)]
-pub struct AddedUser {
-    pub user: UserId,
-    pub organization: OrgId,
-    pub role: Role,
-    pub token: String,
-}
-
-pub async fn add_user(db: &Db, registration: Registration) -> Result<AddedUser, AccountsError> {
-    let role = registration.role;
-    let added = accounts::register(db, Actor::Server, registration).await?;
-    Ok(AddedUser {
-        user: added.user,
-        organization: added.org,
-        role,
-        token: added.token.expose().to_owned(),
-    })
 }
