@@ -151,8 +151,7 @@ async fn recorded_state(db: &Db, run: Run) -> Result<RunState, RunsError> {
 }
 
 async fn list_unfinished_runs(db: &Db) -> Result<Vec<Run>, RunsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::list_unfinished_runs(&mut conn).await?)
+    Ok(store::list_unfinished_runs(db).await?)
 }
 
 fn finished_state(run: Run, finish: Finish) -> RunState {

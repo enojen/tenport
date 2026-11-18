@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", created_at as \"created: _\",\n                  phase as \"phase: _\", reason, exit_code as \"exit_code: _\", oom_kill, output\n           from runs\n           where (? is null or name = ?)\n             and (? is null or (project_id = ? and task_id = ?))\n             and (not ? or finished_at is null)\n             and (? is null\n                  or (created_at, name) > (select created_at, name from runs where name = ?))\n           order by created_at, name\n           limit ?",
+  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", created_at as \"created: _\",\n                  phase as \"phase: _\", reason, exit_code as \"exit_code: _\", oom_kill, output\n           from runs\n           where project_id = ? and task_id = ?\n             and (? is null\n                  or (created_at, name) > (select created_at, name from runs where name = ?))\n           order by created_at, name\n           limit ?",
   "describe": {
     "columns": [
       {
@@ -126,7 +126,7 @@
       }
     ],
     "parameters": {
-      "Right": 9
+      "Right": 5
     },
     "nullable": [
       false,
@@ -142,5 +142,5 @@
       true
     ]
   },
-  "hash": "3a88a5b9c52205317096aff29ec52d6bc4a17f041ebf083a51e04c06690a4bd6"
+  "hash": "b9330a4ddda5f2083df5ab9632092dfdfb123b14541d4f699158a3ed0cc61976"
 }

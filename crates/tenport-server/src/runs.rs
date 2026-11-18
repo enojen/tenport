@@ -299,7 +299,7 @@ async fn find_run_for_member(db: &Db, user: &UserId, name: &RunName) -> Result<R
 }
 
 async fn find_run(db: &Db, name: &RunName) -> Result<Run, RunsError> {
-    store::find_run(&mut *db.acquire().await?, name)
+    store::find_run(db, name)
         .await?
         .ok_or_else(|| RunsError::NotFound { run: name.clone() })
 }
@@ -311,8 +311,7 @@ async fn list_runs_of_task(
     after: Option<&RunName>,
     limit: i64,
 ) -> Result<Vec<Run>, RunsError> {
-    let mut conn = db.acquire().await?;
-    Ok(store::list_runs_of_task(&mut conn, project, task, after, limit).await?)
+    Ok(store::list_runs_of_task(db, project, task, after, limit).await?)
 }
 
 fn find_job_in<'a>(jobs: &'a [JobState], run: &Run) -> Option<&'a JobState> {

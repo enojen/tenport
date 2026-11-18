@@ -3,6 +3,10 @@
 Tenport: the backend of Tenyard, in Rust. `README.md` says what is here, `docs/capabilities.md`
 what it must do.
 
+The rules below are a guide, not law. When the code and a rule disagree, or a rule looks wrong,
+ask the user before you change either one. Explain a change by what it does in the code, not by
+the rule that asks for it.
+
 ## Layout
 
 - One Cargo workspace. Every crate is in `crates/`, flat, and its folder name is its crate name.
@@ -14,7 +18,8 @@ what it must do.
   `model.rs` (types and rules) and `store.rs` (SQL).
 - A `store.rs` function starts with its verb: `find_` returns one row or none
   (`find_user_by_token_hash`), `list_` a `Vec` (`list_memberships_of_user`), `count_` a number,
-  `insert_` writes.
+  `insert_` adds a row (also with `on conflict`, as `insert_task`), `update_` changes rows
+  (`update_task_closed`), `delete_` removes rows (`delete_task`).
 - Only `http/` knows axum: the router, auth, the error responses, OpenAPI, the panel's `sse`
   stream, and one file of endpoints per topic. A topic never imports `http`.
 - No `mod.rs`: `foo.rs` next to the folder `foo/`. No module named `utils`, `helpers` or `common`.
