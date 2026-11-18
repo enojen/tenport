@@ -2,7 +2,6 @@ mod accounts;
 mod agents;
 mod auth;
 mod error;
-mod events;
 mod extract;
 mod health;
 mod lanes;
