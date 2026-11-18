@@ -1,36 +1,13 @@
-use axum::extract::{FromRequestParts, State};
-use axum::http::header::AUTHORIZATION;
-use axum::http::request::Parts;
+use axum::extract::State;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use super::AppState;
+use super::auth::Injector;
 use super::error::{HttpError, PROBLEM_JSON, Problem, TooManyRequests, Unavailable};
 use super::extract::Json;
 use crate::github::GithubError;
 use crate::runs::RunsError;
-
-const BEARER: &str = "Bearer ";
-
-pub struct Injector;
-
-impl FromRequestParts<AppState> for Injector {
-    type Rejection = HttpError;
-
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, HttpError> {
-        let token = parts
-            .headers
-            .get(AUTHORIZATION)
-            .and_then(|header| header.to_str().ok())
-            .and_then(|header| header.strip_prefix(BEARER))
-            .ok_or(HttpError::Unauthorized)?;
-        if state.injector_token.matches(token) {
-            Ok(Self)
-        } else {
-            Err(HttpError::Unauthorized)
-        }
-    }
-}
 
 #[derive(Deserialize, ToSchema)]
 pub struct RunCredentialRequest {
