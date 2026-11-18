@@ -430,13 +430,13 @@ async fn the_job_of_a_run_gets_its_own_placeholder_in_a_secret_that_goes_with_th
     assert_eq!(response.status(), StatusCode::CREATED);
     let run: Value = response.json().await.unwrap();
     let job = JobName::new(run["name"].as_str().unwrap());
-    let secret = SecretName::new(format!("{}-github", job.as_str()));
+    let secret = SecretName::new(format!("{}-placeholder", job.as_str()));
     let uid = FakeCluster::uid_of(&job);
     let placeholder = RunCredentialKey::new(crate::server::RUN_CREDENTIAL_KEY).placeholder(&uid);
     assert!(placeholder.starts_with("tbxph_"), "{placeholder}");
     assert_eq!(
         server.cluster.secret(&secret),
-        Some([("token".to_owned(), placeholder)].into())
+        Some([("placeholder".to_owned(), placeholder)].into())
     );
     let owner = server.cluster.secret_owner(&secret).unwrap();
     assert_eq!(owner.name, job);
