@@ -253,6 +253,7 @@ impl AsyncRead for StillRunning {
 fn job_state(name: &JobName, fake: &FakeJob) -> JobState {
     JobState {
         name: name.clone(),
+        uid: FakeCluster::uid_of(name),
         labels: fake.job.metadata.labels.clone().unwrap_or_default(),
         created: fake.created,
         phase: fake.phase,

@@ -6,8 +6,9 @@ use anyhow::Context;
 use tenport_server::cluster::{Cluster, KubeCluster};
 use tenport_server::command::{self, Command, USAGE};
 use tenport_server::config::Config;
+use tenport_server::github::{GITHUB_API, GithubApp};
 use tenport_server::http::{self, AppState, Limiter, Limits};
-use tenport_server::run_credentials::RunCredentialKey;
+use tenport_server::run_credentials::{InjectorToken, RunCredentialKey};
 use tenport_server::runs::{RunTemplate, Runs};
 use tenport_server::task_archives::TaskArchiveBucket;
 use tenport_server::{db, logs};
@@ -61,6 +62,23 @@ async fn serve() -> anyhow::Result<()> {
         .as_ref()
         .context("TENPORT_RUN_CREDENTIAL_KEY_FILE is not set: each run needs a placeholder")?;
     let run_credential_key = RunCredentialKey::read(key_file)?;
+    let injector_token = InjectorToken::read(
+        config
+            .injector_token_file
+            .as_ref()
+            .context("TENPORT_INJECTOR_TOKEN_FILE is not set: the injector needs it to ask")?,
+    )?;
+    let github = GithubApp::read(
+        config
+            .github_app_id
+            .as_deref()
+            .context("TENPORT_GITHUB_APP_ID is not set: runs need the GitHub App")?,
+        config
+            .github_app_key_file
+            .as_ref()
+            .context("TENPORT_GITHUB_APP_KEY_FILE is not set: runs need the GitHub App")?,
+        GITHUB_API,
+    )?;
     let db = db::open(&config.database).await?;
     let cluster = KubeCluster::connect(&config.run_namespace)
         .await
@@ -76,6 +94,7 @@ async fn serve() -> anyhow::Result<()> {
         config.box_image,
         task_archives,
         run_credential_key,
+        github,
     );
     let listener = TcpListener::bind(config.listen)
         .await
@@ -86,6 +105,7 @@ async fn serve() -> anyhow::Result<()> {
         db,
         cluster,
         runs: Arc::new(runs),
+        injector_token: Arc::new(injector_token),
         limiter: Arc::new(Limiter::new(Limits::default())),
     };
     axum::serve(listener, http::router(state))

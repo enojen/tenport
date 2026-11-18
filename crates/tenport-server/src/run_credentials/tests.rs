@@ -43,3 +43,12 @@ fn an_empty_or_missing_key_file_is_refused() {
         Err(RunCredentialsError::Read { .. })
     ));
 }
+
+#[test]
+fn the_injector_token_matches_only_itself_and_hides_in_debug() {
+    let token = InjectorToken::new("injector-token-for-tests");
+
+    assert!(token.matches("injector-token-for-tests"));
+    assert!(!token.matches("injector-token-for-test"));
+    assert!(!format!("{token:?}").contains("injector-token"));
+}

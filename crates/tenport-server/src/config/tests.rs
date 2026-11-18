@@ -132,3 +132,24 @@ fn reads_the_run_credential_key_file_when_it_is_set() {
         Some(PathBuf::from("/run-credentials/key"))
     );
 }
+
+#[test]
+fn reads_the_injector_token_and_the_github_app_when_they_are_set() {
+    let config = config(&[
+        (DATABASE, "tenport.db"),
+        (INJECTOR_TOKEN_FILE, "/run-credentials/injector-token"),
+        (GITHUB_APP_ID, "5669876"),
+        (GITHUB_APP_KEY_FILE, "/github-app/key.pem"),
+    ])
+    .unwrap();
+
+    assert_eq!(
+        config.injector_token_file,
+        Some(PathBuf::from("/run-credentials/injector-token"))
+    );
+    assert_eq!(config.github_app_id.as_deref(), Some("5669876"));
+    assert_eq!(
+        config.github_app_key_file,
+        Some(PathBuf::from("/github-app/key.pem"))
+    );
+}

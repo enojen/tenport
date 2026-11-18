@@ -11,6 +11,7 @@ use super::*;
 fn meta(name: &str, second: i64) -> ObjectMeta {
     ObjectMeta {
         name: Some(name.to_owned()),
+        uid: Some(format!("uid-of-{name}")),
         creation_timestamp: Some(Time(Timestamp::from_second(second).unwrap())),
         labels: Some([("task".to_owned(), "TEN-1".to_owned())].into()),
         ..ObjectMeta::default()
@@ -146,4 +147,12 @@ fn a_job_secret_names_its_job_as_owner_so_it_goes_with_the_job() {
     assert_eq!(owner.kind, "Job");
     assert_eq!(owner.name, "task-ten-301-1118-101500");
     assert_eq!(owner.uid, "0f3c1c9e-5a7b-4e2d-9c1a-7b6d5e4f3a21");
+}
+
+#[test]
+fn a_job_without_a_uid_is_left_out() {
+    let mut job = job_with(JobStatus::default());
+    job.metadata.uid = None;
+
+    assert_eq!(job_state(&job), None);
 }

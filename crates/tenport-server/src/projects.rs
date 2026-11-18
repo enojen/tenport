@@ -157,6 +157,11 @@ pub(crate) async fn apply(
     Ok(())
 }
 
+pub async fn find(db: &Db, project: &ProjectId) -> Result<Option<Project>, ProjectsError> {
+    let mut conn = db.acquire().await?;
+    Ok(store::find_project(&mut conn, project).await?)
+}
+
 pub async fn require_member(
     db: &Db,
     user: &UserId,

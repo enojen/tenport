@@ -49,6 +49,20 @@ pub async fn list_projects_of_user(
     .await
 }
 
+pub async fn find_project(
+    conn: &mut SqliteConnection,
+    project: &ProjectId,
+) -> Result<Option<Project>, sqlx::Error> {
+    sqlx::query_as!(
+        Project,
+        r#"select id as "id: _", org_id as "org: _", name as "name: _", repo as "repo: _"
+           from projects where id = ?"#,
+        project,
+    )
+    .fetch_optional(conn)
+    .await
+}
+
 pub async fn find_project_for_member(
     conn: &mut SqliteConnection,
     project: &ProjectId,

@@ -12,6 +12,9 @@ const RUN_SERVICES: &str = "TENPORT_RUN_SERVICES";
 const RUN_NAMESPACE: &str = "TENPORT_RUN_NAMESPACE";
 const BOX_IMAGE: &str = "TENPORT_BOX_IMAGE";
 const RUN_CREDENTIAL_KEY_FILE: &str = "TENPORT_RUN_CREDENTIAL_KEY_FILE";
+const INJECTOR_TOKEN_FILE: &str = "TENPORT_INJECTOR_TOKEN_FILE";
+const GITHUB_APP_ID: &str = "TENPORT_GITHUB_APP_ID";
+const GITHUB_APP_KEY_FILE: &str = "TENPORT_GITHUB_APP_KEY_FILE";
 const TASK_ARCHIVE_BUCKET: &str = "TENPORT_TASK_ARCHIVE_BUCKET";
 const TASK_ARCHIVE_BUCKET_REGION: &str = "TENPORT_TASK_ARCHIVE_BUCKET_REGION";
 const TASK_ARCHIVE_BUCKET_KEY_FILE: &str = "TENPORT_TASK_ARCHIVE_BUCKET_KEY_FILE";
@@ -32,6 +35,9 @@ pub struct Config {
     pub box_image: String,
     pub task_archive_bucket: Option<TaskArchiveBucketConfig>,
     pub run_credential_key_file: Option<PathBuf>,
+    pub injector_token_file: Option<PathBuf>,
+    pub github_app_id: Option<String>,
+    pub github_app_key_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +71,9 @@ impl Config {
             box_image: or_default(lookup(BOX_IMAGE), DEFAULT_BOX_IMAGE),
             task_archive_bucket: task_archive_bucket(&lookup)?,
             run_credential_key_file: lookup(RUN_CREDENTIAL_KEY_FILE).map(PathBuf::from),
+            injector_token_file: lookup(INJECTOR_TOKEN_FILE).map(PathBuf::from),
+            github_app_id: lookup(GITHUB_APP_ID),
+            github_app_key_file: lookup(GITHUB_APP_KEY_FILE).map(PathBuf::from),
         })
     }
 }

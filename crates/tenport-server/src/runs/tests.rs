@@ -28,6 +28,7 @@ fn runs_on(cluster: Arc<FakeCluster>) -> Runs {
         "box:1".to_owned(),
         test_bucket(),
         RunCredentialKey::new(RUN_CREDENTIAL_KEY),
+        test_github(),
     )
 }
 
@@ -129,6 +130,11 @@ fn the_run_stamp_is_month_day_and_time_in_utc() {
 }
 
 pub const RUN_CREDENTIAL_KEY: &str = "key-for-tests";
+
+fn test_github() -> crate::github::GithubApp {
+    let key = include_str!("../../tests/github-app-test-key.pem");
+    crate::github::GithubApp::new("1", key, "https://api.example.test").unwrap()
+}
 
 fn test_bucket() -> TaskArchiveBucket {
     TaskArchiveBucket::new(

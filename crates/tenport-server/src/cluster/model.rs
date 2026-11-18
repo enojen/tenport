@@ -72,6 +72,7 @@ pub enum JobPhase {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobState {
     pub name: JobName,
+    pub uid: JobUid,
     pub labels: BTreeMap<String, String>,
     pub created: OffsetDateTime,
     pub phase: JobPhase,

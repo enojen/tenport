@@ -6,7 +6,7 @@ mod template;
 #[cfg(test)]
 mod tests;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use sqlx::SqliteConnection;
@@ -14,13 +14,15 @@ use time::OffsetDateTime;
 use tokio::sync::Mutex;
 
 use crate::accounts::{Email, UserId};
+use crate::github::{GITHUB_HOSTS, GithubApp, GithubError, RepoToken};
 use crate::run_credentials::{RUN_TOKEN_KEY, RunCredentialKey, run_token_secret};
 use crate::task_archives::{TaskArchiveBucket, TaskArchiveState, TaskArchivesError};
 use futures::future::try_join_all;
 use futures::try_join;
 
 use crate::cluster::{
-    Cluster, ClusterError, CreatedJob, JobName, JobPhase, JobState, LogRead, LogReader, PodState,
+    Cluster, ClusterError, CreatedJob, JobName, JobPhase, JobState, JobUid, LogRead, LogReader,
+    PodState,
 };
 use crate::db::Db;
 use crate::events::{self, Actor, ApplyError, Event, EventsError, Stamp};
@@ -38,6 +40,9 @@ pub use template::{RunTemplate, TemplateError};
 use template::TemplateFields;
 
 const GITHUB: &str = "https://github.com";
+const TENPORT_JOBS: &str = "app.kubernetes.io/managed-by=tenport";
+const PROJECT_ID_LABEL: &str = "project-id";
+const TOKEN_REUSE_MARGIN: time::Duration = time::Duration::minutes(5);
 const LABEL_VALUE_MAX: usize = 63;
 
 #[derive(Debug, thiserror::Error)]
@@ -57,6 +62,10 @@ pub enum RunsError {
     Template(#[from] TemplateError),
     #[error(transparent)]
     TaskArchives(#[from] TaskArchivesError),
+    #[error("no open Job of Tenport has this placeholder for {host}")]
+    NoRunCredential { host: String },
+    #[error(transparent)]
+    Github(#[from] GithubError),
     #[error(transparent)]
     Cluster(#[from] ClusterError),
     #[error(transparent)]
@@ -99,6 +108,8 @@ pub struct Runs {
     box_image: String,
     task_archives: TaskArchiveBucket,
     run_credential_key: RunCredentialKey,
+    github: GithubApp,
+    repo_tokens: std::sync::Mutex<HashMap<JobUid, RepoToken>>,
     start_lock: Mutex<()>,
 }
 
@@ -109,6 +120,7 @@ impl Runs {
         box_image: String,
         task_archives: TaskArchiveBucket,
         run_credential_key: RunCredentialKey,
+        github: GithubApp,
     ) -> Self {
         Self {
             cluster,
@@ -116,6 +128,8 @@ impl Runs {
             box_image,
             task_archives,
             run_credential_key,
+            github,
+            repo_tokens: std::sync::Mutex::default(),
             start_lock: Mutex::new(()),
         }
     }
@@ -219,6 +233,57 @@ impl Runs {
             Err(ClusterError::NoPod(_)) => Err(RunsError::JobGone { run: run.name }),
             other => Ok(other?),
         }
+    }
+
+    pub async fn run_credential(
+        &self,
+        db: &Db,
+        placeholder: &str,
+        host: &str,
+    ) -> Result<String, RunsError> {
+        let none = || RunsError::NoRunCredential {
+            host: host.to_owned(),
+        };
+        if !GITHUB_HOSTS.contains(&host) {
+            return Err(none());
+        }
+        let open: Vec<JobState> = self
+            .cluster
+            .list_jobs(TENPORT_JOBS)
+            .await?
+            .into_iter()
+            .filter(|job| job.phase == JobPhase::Running)
+            .collect();
+        self.forget_tokens_of_ended_jobs(&open);
+        let job = open
+            .iter()
+            .find(|job| self.run_credential_key.placeholder(&job.uid) == placeholder)
+            .ok_or_else(none)?;
+        let now = OffsetDateTime::now_utc();
+        if let Some(token) = self.reusable_token(&job.uid, now) {
+            return Ok(token);
+        }
+        let project = job
+            .labels
+            .get(PROJECT_ID_LABEL)
+            .and_then(|id| ProjectId::parse(id).ok())
+            .ok_or_else(none)?;
+        let project = projects::find(db, &project).await?.ok_or_else(none)?;
+        let token = self.github.repo_token(&project.repo, now).await?;
+        let value = token.token.clone();
+        lock(&self.repo_tokens).insert(job.uid.clone(), token);
+        Ok(value)
+    }
+
+    fn reusable_token(&self, job: &JobUid, now: OffsetDateTime) -> Option<String> {
+        lock(&self.repo_tokens)
+            .get(job)
+            .filter(|token| token.expires - now > TOKEN_REUSE_MARGIN)
+            .map(|token| token.token.clone())
+    }
+
+    fn forget_tokens_of_ended_jobs(&self, open: &[JobState]) {
+        lock(&self.repo_tokens).retain(|uid, _| open.iter().any(|job| job.uid == *uid));
     }
 
     pub async fn delete_task(
@@ -358,6 +423,12 @@ async fn list_runs_of_task(
 ) -> Result<Vec<Run>, RunsError> {
     let mut conn = db.acquire().await?;
     Ok(store::list_runs_of_task(&mut conn, project, task, after, limit).await?)
+}
+
+fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn find_job_in<'a>(jobs: &'a [JobState], run: &Run) -> Option<&'a JobState> {

@@ -26,7 +26,26 @@ impl FromRequestParts<AppState> for CurrentUser {
     }
 }
 
+pub struct Injector;
+
+impl FromRequestParts<AppState> for Injector {
+    type Rejection = HttpError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, HttpError> {
+        let token = bearer_text(parts).ok_or(HttpError::Unauthorized)?;
+        if state.injector_token.matches(token) {
+            Ok(Self)
+        } else {
+            Err(HttpError::Unauthorized)
+        }
+    }
+}
+
 fn bearer(parts: &Parts) -> Option<Token> {
+    Token::parse(bearer_text(parts)?).ok()
+}
+
+fn bearer_text(parts: &Parts) -> Option<&str> {
     let header = parts.headers.get(AUTHORIZATION)?.to_str().ok()?;
-    Token::parse(header.strip_prefix(BEARER)?).ok()
+    header.strip_prefix(BEARER)
 }
