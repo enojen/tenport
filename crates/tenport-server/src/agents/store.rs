@@ -84,12 +84,3 @@ pub async fn find_default_agent_of_user(
     .fetch_optional(executor)
     .await
 }
-
-pub async fn count_agents_of_user(
-    executor: impl SqliteExecutor<'_>,
-    user: &UserId,
-) -> Result<i64, sqlx::Error> {
-    sqlx::query_scalar!("select count(*) from agents where user_id = ?", user)
-        .fetch_one(executor)
-        .await
-}

@@ -45,13 +45,13 @@ pub async fn add(
     kind: AgentKind,
     name: Name,
 ) -> Result<Agent, AgentsError> {
-    let first = store::count_agents_of_user(db, user).await? == 0;
+    let has_default = store::find_default_agent_of_user(db, user).await?.is_some();
     let added = AgentAdded {
         user: user.clone(),
         agent: AgentId::random(),
         kind,
         name: name.clone(),
-        default: first,
+        default: !has_default,
     };
     let event = Event::Agents(AgentsEvent::AgentAdded(added.clone()));
     events::append(db, Actor::User(user.clone()), event)
