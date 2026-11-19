@@ -1,5 +1,5 @@
 pub mod accounts;
-mod agents;
+pub mod agents;
 pub mod cluster;
 pub mod command;
 pub mod config;

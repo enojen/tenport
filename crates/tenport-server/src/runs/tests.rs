@@ -2,7 +2,7 @@ use std::path::Path;
 
 use super::*;
 use crate::accounts::Role;
-use crate::fixtures::{add_user, project_of};
+use crate::fixtures::{add_user, add_user_with_agent, project_of};
 use crate::run_credentials::{RunCredentialKey, RunCredentials};
 use crate::task_archives::TaskArchiveBucket;
 use std::time::Duration;
@@ -51,6 +51,7 @@ fn build(project: &ProjectId) -> NewRun {
             name: Name::parse("Enes").unwrap(),
             email: Email::parse("1+enojen@users.noreply.github.com").unwrap(),
         },
+        agent: None,
     }
 }
 
@@ -61,7 +62,7 @@ async fn count_runs(db: &Db) -> i64 {
 #[tokio::test]
 async fn a_started_run_is_a_job_on_the_cluster_and_a_run_in_the_database() {
     let (db, _dir) = db::temp().await;
-    let owner = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
+    let owner = add_user_with_agent(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::default());
     let run = runs_on(cluster.clone())
@@ -78,7 +79,7 @@ async fn a_started_run_is_a_job_on_the_cluster_and_a_run_in_the_database() {
 #[tokio::test]
 async fn a_second_run_of_the_task_waits_until_the_first_job_ends() {
     let (db, _dir) = db::temp().await;
-    let owner = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
+    let owner = add_user_with_agent(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::default());
     let runs = runs_on(cluster.clone());
@@ -93,7 +94,7 @@ async fn a_second_run_of_the_task_waits_until_the_first_job_ends() {
 #[tokio::test]
 async fn runs_of_the_task_started_together_make_one_job() {
     let (db, _dir) = db::temp().await;
-    let owner = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
+    let owner = add_user_with_agent(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::with_create_time(CREATE_TIME));
     let runs = runs_on(cluster.clone());
@@ -110,7 +111,7 @@ async fn runs_of_the_task_started_together_make_one_job() {
 #[tokio::test]
 async fn only_a_member_of_the_projects_organization_starts_a_run() {
     let (db, _dir) = db::temp().await;
-    let owner = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
+    let owner = add_user_with_agent(&db, "Wegobi", "enojen", Role::Admin).await;
     let stranger = add_user(&db, "Other", "someone", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::default());
@@ -151,7 +152,7 @@ async fn count_run_finished(db: &Db) -> i64 {
 #[tokio::test]
 async fn the_timer_records_an_ended_run_once_and_leaves_a_running_one() {
     let (db, _dir) = db::temp().await;
-    let owner = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
+    let owner = add_user_with_agent(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::default());
     let runs = runs_on(cluster.clone());
@@ -170,7 +171,7 @@ async fn the_timer_records_an_ended_run_once_and_leaves_a_running_one() {
 #[tokio::test]
 async fn a_run_whose_job_is_gone_before_its_end_was_seen_ends_unknown() {
     let (db, _dir) = db::temp().await;
-    let owner = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
+    let owner = add_user_with_agent(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::default());
     let runs = runs_on(cluster.clone());
@@ -186,7 +187,7 @@ async fn a_run_whose_job_is_gone_before_its_end_was_seen_ends_unknown() {
 #[tokio::test]
 async fn a_second_end_of_a_run_is_refused_and_the_first_stays() {
     let (db, _dir) = db::temp().await;
-    let owner = add_user(&db, "Wegobi", "enojen", Role::Admin).await;
+    let owner = add_user_with_agent(&db, "Wegobi", "enojen", Role::Admin).await;
     let project = project_of(&db, &owner).await;
     let cluster = Arc::new(FakeCluster::default());
     let runs = runs_on(cluster.clone());

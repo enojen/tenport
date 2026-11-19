@@ -46,6 +46,8 @@ pub enum HttpError {
     #[error("{0}")]
     Conflict(String),
     #[error("{0}")]
+    NoAgent(String),
+    #[error("{0}")]
     MachineBusy(String),
     #[error("{0}")]
     BoxNotStarted(String),
@@ -69,7 +71,7 @@ impl HttpError {
                 StatusCode::TOO_MANY_REQUESTS
             }
             Self::DatabaseDown(_) | Self::Timeout { .. } => StatusCode::SERVICE_UNAVAILABLE,
-            Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::BadRequest(_) | Self::NoAgent(_) => StatusCode::BAD_REQUEST,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::Conflict(_)
@@ -99,6 +101,7 @@ impl HttpError {
             Self::Timeout { .. } => "timeout",
             Self::DatabaseDown(_) => "database-down",
             Self::BadRequest(_) => "bad-request",
+            Self::NoAgent(_) => "no-agent",
             Self::Unauthorized => "unauthorized",
             Self::Forbidden(_) => "forbidden",
             Self::Conflict(_) => "conflict",

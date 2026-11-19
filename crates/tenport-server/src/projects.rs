@@ -14,7 +14,7 @@ use crate::name::Name;
 
 pub use model::{
     Project, ProjectAdded, ProjectId, ProjectSecret, ProjectsEvent, Repo, RepoError, SecretChanged,
-    SecretDeleted, SecretState, SecretValue, SecretValueError, kube_secret_of,
+    SecretDeleted, SecretState, SecretValue, SecretValueError, project_secret,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -79,7 +79,7 @@ pub async fn write_secret(
 ) -> Result<SecretState, ProjectsError> {
     require_project_admin(db, user, project).await?;
     cluster
-        .write_secret_key(&kube_secret_of(project), secret.name(), value.expose())
+        .write_secret_key(&project_secret(project), secret.name(), value.expose())
         .await?;
     let changed = SecretChanged {
         project: project.clone(),
@@ -104,7 +104,7 @@ pub async fn delete_secret(
 ) -> Result<(), ProjectsError> {
     require_project_admin(db, user, project).await?;
     let in_cluster = cluster
-        .delete_secret_key(&kube_secret_of(project), secret.name())
+        .delete_secret_key(&project_secret(project), secret.name())
         .await?;
     let recorded = find_secret(db, project, secret).await?.is_some();
     if !in_cluster && !recorded {

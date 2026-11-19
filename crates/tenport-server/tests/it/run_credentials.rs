@@ -8,7 +8,9 @@ use crate::runs::{build, post_run, project_of};
 use crate::server::{INJECTOR_TOKEN, RUN_CREDENTIAL_KEY, TestServer};
 
 async fn started_job(server: &TestServer) -> (JobName, String) {
-    let token = server.add_user("Wegobi", "enojen", Role::Admin).await;
+    let token = server
+        .add_user_with_agent("Wegobi", "enojen", Role::Admin)
+        .await;
     let project = project_of(server, &token).await;
     let run: Value = post_run(server, &token, &build(&project))
         .await
@@ -78,7 +80,9 @@ async fn only_the_injector_token_may_ask() {
     let server = TestServer::start().await;
     server.github.install("enojen/tenport");
     let (_, placeholder) = started_job(&server).await;
-    let user = server.add_user("Wegobi", "ali", Role::Admin).await;
+    let user = server
+        .add_user_with_agent("Wegobi", "ali", Role::Admin)
+        .await;
 
     let other = ask(&server, "another-token", &placeholder, "api.github.com").await;
     let user = ask(&server, user.expose(), &placeholder, "api.github.com").await;

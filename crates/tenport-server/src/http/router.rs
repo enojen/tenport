@@ -12,12 +12,13 @@ use super::error::HttpError;
 use super::extract::Json;
 use super::limits::limit_requests;
 use super::openapi::{ApiDoc, document};
-use super::{accounts, health, projects, run_credentials, runs, tasks};
+use super::{accounts, agents, health, projects, run_credentials, runs, tasks};
 
 pub fn router(state: AppState) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .merge(health::routes())
         .merge(accounts::routes())
+        .merge(agents::routes())
         .merge(projects::routes())
         .merge(runs::routes())
         .merge(tasks::routes())

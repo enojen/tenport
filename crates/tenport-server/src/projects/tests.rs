@@ -116,5 +116,5 @@ fn a_secret_value_is_never_empty_and_never_printed() {
 #[test]
 fn the_secret_of_a_project_is_named_after_its_id() {
     let project = ProjectId::parse("abc123").unwrap();
-    assert_eq!(kube_secret_of(&project).as_str(), "project-abc123");
+    assert_eq!(project_secret(&project).as_str(), "project-abc123");
 }

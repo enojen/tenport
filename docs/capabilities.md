@@ -88,10 +88,10 @@ second workflow would change the roles only.
 
 | Capability | Status |
 |---|---|
-| A user adds one or more agents in the panel, each with its kind, its account and its name | Decided |
+| A user adds one or more agents, each with its kind, its account and its name: `POST /agents` and `GET /agents` today, the panel later | Done (2026-11-19), panel open |
 | A session and a run use an agent of the person who started them, never another person's | Decided |
-| A user's first agent is their default, and the user can make another agent the default at any time. A session or a run may name another agent of the user; else it uses the default. A user with no agent cannot start one: Tenport answers 400 | Decided, 2026-11-18 |
-| The account of an agent is the Secret `agent-<agent id>` in namespace `tenbox`, and a Job reads the Secret of its agent. Today every Job reads the one Secret `claude-credentials` | Decided, 2026-11-18 |
+| A user's first agent is their default, and the user can make another agent the default at any time. A session or a run may name another agent of the user; else it uses the default. A user with no agent cannot start one: Tenport answers 400 | Done for runs (2026-11-19): `POST /runs` takes `agent`, else the default; `no-agent` is the 400. Making another agent the default is open |
+| The account of an agent is the Secret `agent-<agent id>` in namespace `tenbox`, key `credentials.json`, and a Job reads the Secret of its agent (`__AGENT_ID__` in the template). `PUT /agents/{agent}/login` writes it; Tenport keeps no copy, not in its database, not in an event, not in a log, and never gives it back. `agent.login_changed` and `GET /agents` tell only when it changed | Done (2026-11-19) |
 | Phase 1, one user: the claude.ai login, as today, and chat with Remote Control | Proposed |
 | Phase 2, other users: each organization brings its own API key, and the chat moves into Tenface with the Agent SDK | Proposed |
 | In phase 2, the API key belongs to the organization or to the user | Open |

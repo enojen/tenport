@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", created_at as \"created: _\",\n                  phase as \"phase: _\", reason, exit_code as \"exit_code: _\", oom_kill, output\n           from runs\n           where name = ?",
+  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", agent_id as \"agent: _\",\n                  created_at as \"created: _\",\n                  phase as \"phase: _\", reason, exit_code as \"exit_code: _\", oom_kill, output\n           from runs\n           where project_id = ? and task_id = ?\n             and (? is null\n                  or (created_at, name) > (select created_at, name from runs where name = ?))\n           order by created_at, name\n           limit ?",
   "describe": {
     "columns": [
       {
@@ -59,8 +59,19 @@
         }
       },
       {
-        "name": "created: _",
+        "name": "agent: _",
         "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "agent_id"
+          }
+        }
+      },
+      {
+        "name": "created: _",
+        "ordinal": 6,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -71,7 +82,7 @@
       },
       {
         "name": "phase: _",
-        "ordinal": 6,
+        "ordinal": 7,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -82,7 +93,7 @@
       },
       {
         "name": "reason",
-        "ordinal": 7,
+        "ordinal": 8,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -93,7 +104,7 @@
       },
       {
         "name": "exit_code: _",
-        "ordinal": 8,
+        "ordinal": 9,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -104,7 +115,7 @@
       },
       {
         "name": "oom_kill",
-        "ordinal": 9,
+        "ordinal": 10,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -115,7 +126,7 @@
       },
       {
         "name": "output",
-        "ordinal": 10,
+        "ordinal": 11,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -126,7 +137,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 5
     },
     "nullable": [
       false,
@@ -134,6 +145,7 @@
       false,
       false,
       false,
+      true,
       false,
       true,
       true,
@@ -142,5 +154,5 @@
       true
     ]
   },
-  "hash": "c337aa43ac384489c1ba1f49ac976f244bed9026ffc080ec0072f53613e91f0d"
+  "hash": "dbc1ba6d29970e6849b9be5065ef9f110c36990a5cbb84a114507f4d56f7dd43"
 }

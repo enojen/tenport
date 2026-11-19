@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "update agents set login_changed_at = ? where id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "72d74d946389c2307eedb205887c75f4c45247abe5ba22597ca09bc16fb01eba"
+}

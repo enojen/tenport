@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 
+use crate::agents::AgentId;
 use crate::cluster::{JobName, JobPhase};
 use crate::name::parsed_text;
 use crate::projects::ProjectId;
@@ -135,6 +136,8 @@ pub struct RunStarted {
     pub run: RunName,
     pub command: CommandName,
     pub class: ClassName,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,6 +204,7 @@ pub struct Run {
     pub task: TaskId,
     pub command: CommandName,
     pub class: ClassName,
+    pub agent: Option<AgentId>,
     pub created: OffsetDateTime,
     pub finished: Option<Finish>,
 }

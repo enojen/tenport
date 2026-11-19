@@ -5,6 +5,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::accounts::{AccountsEvent, UserId};
+use crate::agents::AgentsEvent;
 use crate::projects::ProjectsEvent;
 use crate::runs::RunsEvent;
 use crate::tasks::TasksEvent;
@@ -46,6 +47,7 @@ impl fmt::Display for Actor {
 #[serde(untagged)]
 pub enum Event {
     Accounts(AccountsEvent),
+    Agents(AgentsEvent),
     Projects(ProjectsEvent),
     Tasks(TasksEvent),
     Runs(RunsEvent),
@@ -55,6 +57,7 @@ impl Event {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Accounts(event) => event.kind(),
+            Self::Agents(event) => event.kind(),
             Self::Projects(event) => event.kind(),
             Self::Tasks(event) => event.kind(),
             Self::Runs(event) => event.kind(),
@@ -64,6 +67,7 @@ impl Event {
     pub fn subject(&self) -> String {
         match self {
             Self::Accounts(event) => event.subject(),
+            Self::Agents(event) => event.subject(),
             Self::Projects(event) => event.subject(),
             Self::Tasks(event) => event.subject(),
             Self::Runs(event) => event.subject(),

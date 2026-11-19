@@ -133,7 +133,7 @@ impl fmt::Display for ProjectSecret {
     }
 }
 
-pub fn kube_secret_of(project: &ProjectId) -> SecretName {
+pub fn project_secret(project: &ProjectId) -> SecretName {
     SecretName::new(format!("project-{project}"))
 }
 

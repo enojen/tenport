@@ -1,4 +1,5 @@
 use crate::accounts::{self, AddedUser, GithubLogin, NewUser, Role};
+use crate::agents::{self, AgentKind};
 use crate::db::Db;
 use crate::events::Actor;
 use crate::name::Name;
@@ -16,6 +17,20 @@ pub async fn add_user(db: &Db, organization: &str, github: &str, role: Role) -> 
     accounts::add_user(db, Actor::Server, new_user)
         .await
         .unwrap()
+}
+
+pub async fn add_user_with_agent(
+    db: &Db,
+    organization: &str,
+    github: &str,
+    role: Role,
+) -> AddedUser {
+    let added = add_user(db, organization, github, role).await;
+    let name = Name::parse("personal").unwrap();
+    agents::add(db, &added.user, AgentKind::ClaudeCode, name)
+        .await
+        .unwrap();
+    added
 }
 
 pub async fn project_of(db: &Db, owner: &AddedUser) -> ProjectId {
