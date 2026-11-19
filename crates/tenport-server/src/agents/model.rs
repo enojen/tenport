@@ -81,6 +81,12 @@ pub struct LoginChanged {
     pub agent: AgentId,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoginState {
+    pub agent: AgentId,
+    pub changed: OffsetDateTime,
+}
+
 pub fn agent_secret(agent: &AgentId) -> SecretName {
     SecretName::new(format!("agent-{agent}"))
 }

@@ -123,7 +123,7 @@ impl Runs {
 
     pub async fn start(&self, db: &Db, user: &UserId, new: NewRun) -> Result<Run, RunsError> {
         let project = projects::require_member(db, user, &new.project).await?;
-        let agent = agents::agent_of_run(db, user, new.agent.as_ref()).await?;
+        let agent = agents::named_or_default(db, user, new.agent.as_ref()).await?;
         let name = self.create_job_when_idle(&project, &new, &agent).await?;
         let started = RunStarted {
             project: project.id.clone(),
