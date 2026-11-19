@@ -11,7 +11,7 @@ use crate::name::Name;
 
 short_id!(AgentId, "a-", "an agent id");
 
-pub const LOGIN_KEY: &str = "credentials.json";
+pub const AGENT_LOGIN_KEY: &str = "credentials.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema, sqlx::Type)]
 #[serde(rename_all = "kebab-case")]
@@ -100,7 +100,9 @@ pub struct AgentLoginError;
 impl AgentLogin {
     pub fn parse(raw: &str) -> Result<Self, AgentLoginError> {
         let fits = (1..=MAX_LOGIN_LENGTH).contains(&raw.chars().count());
-        if fits && is_json_object(raw) {
+        let is_object =
+            serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(raw).is_ok();
+        if fits && is_object {
             Ok(Self(raw.to_owned()))
         } else {
             Err(AgentLoginError)
@@ -110,10 +112,6 @@ impl AgentLogin {
     pub fn expose(&self) -> &str {
         &self.0
     }
-}
-
-fn is_json_object(raw: &str) -> bool {
-    serde_json::from_str::<serde_json::Value>(raw).is_ok_and(|value| value.is_object())
 }
 
 impl TryFrom<String> for AgentLogin {
