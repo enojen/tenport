@@ -107,7 +107,13 @@ impl GithubApp {
         );
         let body = json!({
             "repositories": [repo.name()],
-            "permissions": { "contents": "write", "pull_requests": "write", "issues": "write" },
+            "permissions": {
+                "contents": "write",
+                "pull_requests": "write",
+                "issues": "write",
+                "checks": "read",
+                "statuses": "read",
+            },
         });
         let minted: Option<AccessToken> = self
             .send(self.client.post(&tokens_url).json(&body), &jwt, &tokens_url)

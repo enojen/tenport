@@ -50,7 +50,13 @@ async fn the_placeholder_of_an_open_job_gets_a_token_for_its_project_repository_
         server.github.mints(),
         vec![json!({
             "repositories": ["tenport"],
-            "permissions": { "contents": "write", "pull_requests": "write", "issues": "write" }
+            "permissions": {
+                "contents": "write",
+                "pull_requests": "write",
+                "issues": "write",
+                "checks": "read",
+                "statuses": "read"
+            }
         })]
     );
     assert!(
