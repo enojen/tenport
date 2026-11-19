@@ -2,7 +2,6 @@ mod model;
 mod store;
 
 use sqlx::SqliteConnection;
-use time::OffsetDateTime;
 
 use crate::accounts::UserId;
 use crate::cluster::{Cluster, ClusterError};
@@ -12,7 +11,7 @@ use crate::name::Name;
 
 pub use model::{
     AGENT_LOGIN_KEY, Agent, AgentAdded, AgentId, AgentKind, AgentLogin, AgentLoginError,
-    AgentsEvent, LoginChanged, agent_secret,
+    AgentsEvent, LoginChanged, LoginState, agent_secret,
 };
 
 const UNIQUE_NAME: &str = "agents.name";
@@ -31,12 +30,6 @@ pub enum AgentsError {
     Events(#[from] EventsError),
     #[error("cannot read agents: {0}")]
     Database(#[from] sqlx::Error),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LoginState {
-    pub agent: AgentId,
-    pub changed: OffsetDateTime,
 }
 
 pub async fn add(
@@ -98,12 +91,12 @@ pub async fn write_login(
     })
 }
 
-pub async fn agent_of_run(
+pub async fn named_or_default(
     db: &Db,
     user: &UserId,
-    named: Option<&AgentId>,
+    agent: Option<&AgentId>,
 ) -> Result<AgentId, AgentsError> {
-    match named {
+    match agent {
         Some(agent) => Ok(require_own(db, user, agent).await?.id),
         None => store::find_default_agent_of_user(db, user)
             .await?
