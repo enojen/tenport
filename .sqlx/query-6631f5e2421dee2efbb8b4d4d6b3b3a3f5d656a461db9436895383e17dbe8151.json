@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "select id as \"id: AgentId\" from agents where user_id = ? and is_default",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: AgentId",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "agents",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6631f5e2421dee2efbb8b4d4d6b3b3a3f5d656a461db9436895383e17dbe8151"
+}

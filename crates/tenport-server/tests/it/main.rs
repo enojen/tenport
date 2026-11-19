@@ -1,4 +1,5 @@
 mod accounts;
+mod agents;
 mod bucket;
 mod commands;
 mod events;

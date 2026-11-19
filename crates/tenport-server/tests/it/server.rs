@@ -92,6 +92,19 @@ impl TestServer {
             .unwrap()
             .token
     }
+
+    pub async fn add_user_with_agent(&self, organization: &str, github: &str, role: Role) -> Token {
+        let token = self.add_user(organization, github, role).await;
+        let response = reqwest::Client::new()
+            .post(self.url("/agents"))
+            .bearer_auth(token.expose())
+            .json(&serde_json::json!({ "kind": "claude-code", "name": "personal" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::CREATED);
+        token
+    }
 }
 
 fn runs_on(

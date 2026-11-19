@@ -11,6 +11,7 @@ use time::OffsetDateTime;
 
 use super::NewRun;
 use super::model::{ClassName, ServiceName};
+use crate::agents::AgentId;
 use crate::cluster::{BOX_CONTAINER, MANAGED_BY_LABEL, MANAGER};
 use crate::projects::Project;
 use crate::task_archives::TaskArchiveUrls;
@@ -41,6 +42,7 @@ pub struct TemplateFields {
     pub run: String,
     pub project: String,
     pub project_id: String,
+    pub agent_id: String,
     pub repo: String,
     pub base: String,
     pub git_name: String,
@@ -218,6 +220,7 @@ fn placeholders(
         ("__RUN__", fields.run.clone()),
         ("__PROJECT__", fields.project.clone()),
         ("__PROJECT_ID__", fields.project_id.clone()),
+        ("__AGENT_ID__", fields.agent_id.clone()),
         ("__REPO__", fields.repo.clone()),
         ("__BASE__", fields.base.clone()),
         ("__GIT_NAME__", fields.git_name.clone()),
@@ -291,6 +294,7 @@ fn mark_managed(job: &mut Value) {
 pub fn fields(
     project: &Project,
     new: &NewRun,
+    agent: &AgentId,
     image: &str,
     archive: TaskArchiveUrls,
     now: OffsetDateTime,
@@ -303,6 +307,7 @@ pub fn fields(
         run,
         project: project_label(project),
         project_id: project.id.to_string(),
+        agent_id: agent.to_string(),
         repo: format!("{GITHUB}/{}.git", project.repo.as_str()),
         base: new.base.as_str().to_owned(),
         git_name: new.author.name.as_str().to_owned(),

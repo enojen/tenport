@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", created_at as \"created: _\",\n                  phase as \"phase: _\", reason, exit_code as \"exit_code: _\", oom_kill, output\n           from runs\n           where finished_at is null\n           order by created_at, name",
+  "query": "select name as \"name: _\", project_id as \"project: _\", task_id as \"task: _\",\n                  command as \"command: _\", class as \"class: _\", agent_id as \"agent: _\",\n                  created_at as \"created: _\",\n                  phase as \"phase: _\", reason, exit_code as \"exit_code: _\", oom_kill, output\n           from runs\n           where finished_at is null\n           order by created_at, name",
   "describe": {
     "columns": [
       {
@@ -59,8 +59,19 @@
         }
       },
       {
-        "name": "created: _",
+        "name": "agent: _",
         "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "runs",
+            "name": "agent_id"
+          }
+        }
+      },
+      {
+        "name": "created: _",
+        "ordinal": 6,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -71,7 +82,7 @@
       },
       {
         "name": "phase: _",
-        "ordinal": 6,
+        "ordinal": 7,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -82,7 +93,7 @@
       },
       {
         "name": "reason",
-        "ordinal": 7,
+        "ordinal": 8,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -93,7 +104,7 @@
       },
       {
         "name": "exit_code: _",
-        "ordinal": 8,
+        "ordinal": 9,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -104,7 +115,7 @@
       },
       {
         "name": "oom_kill",
-        "ordinal": 9,
+        "ordinal": 10,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -115,7 +126,7 @@
       },
       {
         "name": "output",
-        "ordinal": 10,
+        "ordinal": 11,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -134,6 +145,7 @@
       false,
       false,
       false,
+      true,
       false,
       true,
       true,
@@ -142,5 +154,5 @@
       true
     ]
   },
-  "hash": "c7175eca8369e495a76cd7d51a618d8490b563c855bfabb8a76d16359cb816e6"
+  "hash": "a4871fb22dcfb97ad51e6b188cc249ee4c17208e41224daecf222ef89a55d546"
 }

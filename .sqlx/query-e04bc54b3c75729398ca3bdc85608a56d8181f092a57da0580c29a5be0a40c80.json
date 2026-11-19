@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "select id as \"id: _\", kind as \"kind: _\", name as \"name: _\", is_default as \"default: _\",\n                  login_changed_at as \"login_changed: _\"\n           from agents where user_id = ?\n           order by created_at, id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: _",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "agents",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "kind: _",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "agents",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "name": "name: _",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "agents",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "default: _",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "agents",
+            "name": "is_default"
+          }
+        }
+      },
+      {
+        "name": "login_changed: _",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "agents",
+            "name": "login_changed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "e04bc54b3c75729398ca3bdc85608a56d8181f092a57da0580c29a5be0a40c80"
+}

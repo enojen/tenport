@@ -22,6 +22,7 @@ fn fields(class: &str) -> TemplateFields {
         run: "1117-101500".to_owned(),
         project: "Tenport".to_owned(),
         project_id: "abc123".to_owned(),
+        agent_id: "a-k3x9qa".to_owned(),
         repo: "https://github.com/enojen/tenport.git".to_owned(),
         base: "main".to_owned(),
         git_name: "Enes".to_owned(),

@@ -18,6 +18,7 @@ use super::extract::{Json, Path, Query};
 use super::limits::LogStreamPermit;
 use super::page::{Page, PageQuery, Paged};
 use crate::accounts::Email;
+use crate::agents::AgentId;
 use crate::cluster::LogReader;
 use crate::name::Name;
 use crate::projects::ProjectId;
@@ -51,6 +52,8 @@ pub struct NewRun {
     #[schema(value_type = Vec<String>, example = json!(["postgres"]))]
     services: Vec<ServiceName>,
     author: Author,
+    #[schema(value_type = Option<String>, example = "a-k3x9qa")]
+    agent: Option<AgentId>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -77,8 +80,9 @@ pub struct Run {
     request_body(content = NewRun, description = "One tenbox command to run in a box"),
     responses(
         (status = CREATED, description = "The Job of the run is created", body = Run),
-        (status = BAD_REQUEST, description = "The body is not a valid run: an unknown command, class or service", body = Problem, content_type = PROBLEM_JSON),
+        (status = BAD_REQUEST, description = "The body is not a valid run: an unknown command, class or service; or the user has no agent (code no-agent)", body = Problem, content_type = PROBLEM_JSON),
         (status = FORBIDDEN, response = NotMember),
+        (status = NOT_FOUND, description = "The run names an agent the user does not have", body = Problem, content_type = PROBLEM_JSON),
         (status = CONFLICT, description = "A Job of the task still runs (code machine-busy)", body = Problem, content_type = PROBLEM_JSON),
     ),
 )]
@@ -113,6 +117,8 @@ pub struct RunState {
     command: String,
     #[schema(example = "build")]
     class: String,
+    #[schema(example = "a-k3x9qa")]
+    agent: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     created: OffsetDateTime,
@@ -259,6 +265,7 @@ impl From<RunsError> for HttpError {
     fn from(error: RunsError) -> Self {
         match error {
             RunsError::Projects(error) => error.into(),
+            RunsError::Agents(error) => error.into(),
             RunsError::NotFound { .. } => Self::NotFound(error.to_string()),
             RunsError::NotStarted { .. } => Self::BoxNotStarted(error.to_string()),
             RunsError::JobGone { .. } => Self::JobGone(error.to_string()),
@@ -280,6 +287,7 @@ impl From<runs::RunState> for RunState {
             task: run.task.to_string(),
             command: run.command.as_str().to_owned(),
             class: run.class.as_str().to_owned(),
+            agent: run.agent.map(|agent| agent.to_string()),
             created: run.created,
             phase: state.phase,
             reason: state.reason,
@@ -306,6 +314,7 @@ fn new_run(body: NewRun) -> Result<runs::NewRun, HttpError> {
             name: body.author.name,
             email: body.author.email,
         },
+        agent: body.agent,
     })
 }
 

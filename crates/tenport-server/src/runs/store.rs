@@ -3,6 +3,7 @@ use time::OffsetDateTime;
 
 use super::command::CommandName;
 use super::model::{ClassName, Finish, FinishedPhase, Run, RunFinished, RunName, RunStarted};
+use crate::agents::AgentId;
 use crate::events::Stamp;
 use crate::projects::ProjectId;
 use crate::tasks::TaskId;
@@ -13,6 +14,7 @@ struct RunRow {
     task: TaskId,
     command: CommandName,
     class: ClassName,
+    agent: Option<AgentId>,
     created: OffsetDateTime,
     phase: Option<FinishedPhase>,
     reason: Option<String>,
@@ -39,6 +41,7 @@ impl RunRow {
             task: self.task,
             command: self.command,
             class: self.class,
+            agent: self.agent,
             created: self.created,
             finished,
         })
@@ -58,13 +61,14 @@ pub async fn insert_run(
 ) -> Result<(), sqlx::Error> {
     let command = started.command.as_str();
     sqlx::query!(
-        "insert into runs (name, project_id, task_id, command, class, created_at, created_by)
-         values (?, ?, ?, ?, ?, ?, ?)",
+        "insert into runs (name, project_id, task_id, command, class, agent_id, created_at, created_by)
+         values (?, ?, ?, ?, ?, ?, ?, ?)",
         started.run,
         started.project,
         started.task,
         command,
         started.class,
+        started.agent,
         stamp.at,
         stamp.actor,
     )
@@ -105,7 +109,8 @@ pub async fn find_run(
     let row = sqlx::query_as!(
         RunRow,
         r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
-                  command as "command: _", class as "class: _", created_at as "created: _",
+                  command as "command: _", class as "class: _", agent_id as "agent: _",
+                  created_at as "created: _",
                   phase as "phase: _", reason, exit_code as "exit_code: _", oom_kill, output
            from runs
            where name = ?"#,
@@ -126,7 +131,8 @@ pub async fn list_runs_of_task(
     let rows = sqlx::query_as!(
         RunRow,
         r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
-                  command as "command: _", class as "class: _", created_at as "created: _",
+                  command as "command: _", class as "class: _", agent_id as "agent: _",
+                  created_at as "created: _",
                   phase as "phase: _", reason, exit_code as "exit_code: _", oom_kill, output
            from runs
            where project_id = ? and task_id = ?
@@ -151,7 +157,8 @@ pub async fn list_unfinished_runs(
     let rows = sqlx::query_as!(
         RunRow,
         r#"select name as "name: _", project_id as "project: _", task_id as "task: _",
-                  command as "command: _", class as "class: _", created_at as "created: _",
+                  command as "command: _", class as "class: _", agent_id as "agent: _",
+                  created_at as "created: _",
                   phase as "phase: _", reason, exit_code as "exit_code: _", oom_kill, output
            from runs
            where finished_at is null

@@ -15,6 +15,7 @@ use time::OffsetDateTime;
 use tokio::sync::{Mutex, MutexGuard};
 
 use crate::accounts::{Email, UserId};
+use crate::agents::{self, AgentId, AgentsError};
 use crate::run_credentials::{RUN_PLACEHOLDER_KEY, RunCredentials, run_placeholder_secret};
 use crate::task_archives::TaskArchiveBucket;
 use futures::future::try_join_all;
@@ -59,6 +60,8 @@ pub enum RunsError {
     #[error(transparent)]
     Projects(#[from] ProjectsError),
     #[error(transparent)]
+    Agents(#[from] AgentsError),
+    #[error(transparent)]
     Events(#[from] EventsError),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
@@ -88,6 +91,7 @@ pub struct NewRun {
     pub setup: String,
     pub services: Vec<ServiceName>,
     pub author: Author,
+    pub agent: Option<AgentId>,
 }
 
 pub struct Runs {
@@ -119,13 +123,15 @@ impl Runs {
 
     pub async fn start(&self, db: &Db, user: &UserId, new: NewRun) -> Result<Run, RunsError> {
         let project = projects::require_member(db, user, &new.project).await?;
-        let name = self.create_job_when_idle(&project, &new).await?;
+        let agent = agents::agent_of_run(db, user, new.agent.as_ref()).await?;
+        let name = self.create_job_when_idle(&project, &new, &agent).await?;
         let started = RunStarted {
             project: project.id.clone(),
             task: new.task.clone(),
             run: name.clone(),
             command: new.command.name(),
             class: new.class,
+            agent: Some(agent),
         };
         let event = Event::Runs(RunsEvent::RunStarted(started));
         events::append(db, Actor::User(user.clone()), event).await?;
@@ -136,12 +142,14 @@ impl Runs {
         &self,
         project: &Project,
         new: &NewRun,
+        agent: &AgentId,
     ) -> Result<RunName, RunsError> {
         let _idle = self.lock_idle_task(project, &new.task).await?;
         let archive = self.task_archives.presign(&project.id, &new.task);
         let fields = job::fields(
             project,
             new,
+            agent,
             &self.box_image,
             archive,
             OffsetDateTime::now_utc(),
