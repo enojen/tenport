@@ -81,7 +81,7 @@ pub struct LoginChanged {
     pub agent: AgentId,
 }
 
-pub fn kube_secret_of(agent: &AgentId) -> SecretName {
+pub fn agent_secret(agent: &AgentId) -> SecretName {
     SecretName::new(format!("agent-{agent}"))
 }
 

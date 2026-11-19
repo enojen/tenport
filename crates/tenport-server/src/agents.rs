@@ -12,7 +12,7 @@ use crate::name::Name;
 
 pub use model::{
     Agent, AgentAdded, AgentId, AgentKind, AgentLogin, AgentLoginError, AgentsEvent, LOGIN_KEY,
-    LoginChanged, kube_secret_of,
+    LoginChanged, agent_secret,
 };
 
 const UNIQUE_NAME: &str = "agents.name";
@@ -81,7 +81,7 @@ pub async fn write_login(
 ) -> Result<LoginState, AgentsError> {
     require_own(db, user, agent).await?;
     cluster
-        .write_secret_key(&kube_secret_of(agent), LOGIN_KEY, login.expose())
+        .write_secret_key(&agent_secret(agent), LOGIN_KEY, login.expose())
         .await?;
     let changed = LoginChanged {
         agent: agent.clone(),
